@@ -1,0 +1,12 @@
+# One-click setup on Render (free plan). See README → "Host it online for free".
+services:
+  - type: web
+    name: castle-clash
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/ping
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false   # Render asks you to type it when you create the service

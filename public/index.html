@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EFE3C6">
+<meta name="color-scheme" content="light only">
+<title>Castle Clash</title>
+<link rel="icon" href="/static/logo.svg">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { min-height: 100dvh; }
+  .app { max-width: 520px; margin: 0 auto; padding: 14px 16px calc(110px + env(safe-area-inset-bottom)); }
+  .topbar { position: sticky; top: 0; z-index: 10; background: var(--stone); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; margin: -14px -16px 12px; }
+  .who { display: flex; align-items: center; gap: 8px; font-weight: 700; min-width: 0; }
+  .who .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .timer { font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; }
+  .timer.low { color: var(--gules); }
+  .timer.paused { color: var(--muted); }
+  .round-line { font-size: .85rem; color: var(--muted); font-weight: 650; }
+
+  .join-hero { padding: 40px 4px 24px; text-align: center; }
+  .join-hero h1 { font-size: 2.2rem; }
+  .code-input { font-size: 2rem !important; letter-spacing: .5em; text-align: center; font-weight: 800; padding-left: calc(12px + .5em) !important; }
+
+  .rules { background: var(--azure-soft); border-radius: 16px; padding: 12px 14px; }
+  .rules h2 { color: var(--azure); font-size: 1.1rem; }
+  .rules p { font-size: .92rem; margin-top: 4px; }
+
+  .left-count { font-size: 2.4rem; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+  .left-count.over { color: var(--gules); }
+  .left-count.done { color: var(--vert); }
+
+  .castles { display: grid; gap: 8px; }
+  .crow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; background: var(--paper); border-radius: 14px; padding: 8px 8px 8px 12px; border: 1.5px solid transparent; }
+  .crow.bad { border-color: var(--gules); }
+  .cname { font-weight: 750; }
+  .cmeta { font-size: .78rem; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 3px; padding-left: calc(1.7em * .8 + 8px); }
+  .val { display: inline-flex; }
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper button { width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--stone); font-size: 1.4rem; font-weight: 700; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .stepper button:active { background: var(--line); }
+  .stepper input { width: 62px; text-align: center; font-weight: 800; font-size: 1.15rem; padding: 9px 4px; }
+
+  .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: linear-gradient(to top, var(--stone) 70%, transparent); padding: 16px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .dock-inner { max-width: 520px; margin: 0 auto; }
+  .navbar { display: flex; gap: 8px; margin-top: 8px; }
+  .navbar .tab { flex: 1; padding: 9px; }
+
+  .mate { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+  .big-score { font-size: 3.6rem; font-weight: 850; letter-spacing: -.04em; line-height: 1; }
+  .stat { text-align: center; flex: 1; }
+  .stat b { display: block; font-size: 1.3rem; }
+  .waiting-castle { width: 112px; height: 112px; margin: 6px auto 0; display: block; }
+</style>
+</head>
+<body>
+<main class="app" id="app"><p class="muted" style="padding:40px 0;text-align:center">Loading…</p></main>
+<div class="dock hidden" id="dock"><div class="dock-inner" id="dockInner"></div></div>
+<script src="/static/common.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

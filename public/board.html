@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light only">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Castle Clash Board</title>
+<link rel="icon" href="/static/logo.svg">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { font-size: 18px; min-height: 100vh; }
+  .wrap-b { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); gap: 24px; padding: 28px; max-width: 1600px; margin: 0 auto; }
+  @media (max-width: 900px) { .wrap-b { grid-template-columns: 1fr; padding: 16px; } }
+  .stage { min-height: calc(100vh - 56px); display: flex; flex-direction: column; }
+  .stage .panel { padding: 28px; flex: 1; }
+  .side .panel { padding: 22px; }
+  .eyebrow { color: var(--muted); font-weight: 700; font-size: 1rem; }
+  .mode { font-size: clamp(2.2rem, 4.5vw, 4rem); font-weight: 850; letter-spacing: -.03em; }
+  .blurb { font-size: clamp(1.05rem, 1.6vw, 1.4rem); max-width: 46em; color: var(--ink); }
+  .giant { font-size: clamp(5rem, 15vw, 13rem); font-weight: 850; line-height: .9; letter-spacing: -.05em; }
+  .giant.low { color: var(--gules); }
+  .giant.paused { color: var(--muted); }
+  .teamprog { display: grid; grid-template-columns: minmax(140px, 220px) 1fr auto; gap: 8px 16px; align-items: center; }
+  .pips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pip { width: 18px; height: 18px; border-radius: 6px; background: var(--stone); box-shadow: inset 0 0 0 1.5px var(--line); }
+  .joinbox { display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: center; }
+  @media (max-width: 700px) { .joinbox { grid-template-columns: 1fr; } }
+  .qr { background: #fff; padding: 10px; border-radius: 16px; width: 220px; }
+  .url { font-size: clamp(1.4rem, 2.6vw, 2.2rem); font-weight: 800; word-break: break-all; }
+  .corner-join { display: flex; align-items: center; gap: 12px; }
+  .corner-join .qr { width: 86px; padding: 5px; border-radius: 10px; }
+  .teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 16px; align-items: end; text-align: center; }
+  .pod { border-radius: 16px 16px 6px 6px; padding: 16px 10px; color: #fff; }
+  .pod b { font-size: 1.4rem; display: block; }
+  table.list td { padding: 12px 8px; }
+  .side table.list { font-size: 1.05rem; }
+  .big-table table.list { font-size: 1.15rem; }
+  .big-table table.list tr.sub td { font-size: 1rem; }
+</style>
+</head>
+<body>
+<div class="wrap-b">
+  <div class="stage"><div class="stack" style="flex:1;display:flex;flex-direction:column">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <section class="panel stack-lg" id="stage" aria-live="polite"></section>
+  </div></div>
+  <aside class="side stack-lg">
+    <section class="panel"><div class="spread" style="margin-bottom:8px"><h2 id="title">Castle Clash</h2><span class="muted small" id="prog"></span></div><div id="overall"></div></section>
+    <section class="panel" id="joinSide"></section>
+  </aside>
+</div>
+<script src="/static/vendor/qrcode.js"></script>
+<script src="/static/common.js"></script>
+<script>
+(() => {
+  const { $, esc, fmt, skyline, clock, remaining, shield, qr } = CC;
+  let S = null, sel = 'live', lastRoundId = null, lastQr = '', qrSvg = '';
+  const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  const getQr = () => { if (S.joinUrl !== lastQr) { lastQr = S.joinUrl; qrSvg = qr(S.joinUrl); } return qrSvg; };
+
+  function render() {
+    if (!S) return;
+    document.title = `${S.title} Board`;
+    $('#title').textContent = S.title;
+    $('#prog').textContent = `${S.playedCount} of ${S.totalRounds} rounds played`;
+    $('#overall').innerHTML = CC.overallTable(S.board) ;
+    const curId = S.round && S.round.id;
+    if (curId !== lastRoundId) { lastRoundId = curId; sel = 'live'; }
+    const rounds = S.board.rounds;
+    if (sel !== 'live' && sel !== 'overall' && !rounds.find((r) => r.roundId === sel)) sel = 'live';
+    $('#tabs').innerHTML = `<button class="tab" data-sel="live" aria-selected="${sel === 'live'}">Live</button><button class="tab" data-sel="overall" aria-selected="${sel === 'overall'}">Overall</button>` +
+      rounds.map((r) => `<button class="tab" data-sel="${r.roundId}" aria-selected="${sel === r.roundId}">Round ${r.n}</button>`).join('');
+    $('#joinSide').innerHTML = `<div class="corner-join"><div class="qr">${getQr()}</div><div><div class="small muted">Join on your phone</div><div style="font-weight:800;word-break:break-all">${esc(S.joinUrl)}</div><div class="small muted">Use the code on your table card.</div></div></div>`;
+    $('#joinSide').classList.toggle('hidden', S.status === 'lobby' && sel === 'live');
+    const openCards = [...document.querySelectorAll('#stage details.tcard[open]')].map((d) => d.dataset.team);
+    $('#stage').innerHTML = sel === 'live' ? live() : sel === 'overall' ? overallView() : roundView(rounds.find((r) => r.roundId === sel), false);
+    openCards.forEach((id) => { const d = document.querySelector(`#stage details.tcard[data-team="${id}"]`); if (d) d.open = true; });
+    tick();
+  }
+  function live() {
+    const st = S.status, r = S.round;
+    if (st === 'lobby') {
+      return `<div class="eyebrow">Get ready</div><div class="mode">${esc(S.title)}</div>
+        <div class="joinbox"><div class="qr">${getQr()}</div><div class="stack"><div class="eyebrow">Scan or open</div><div class="url">${esc(S.joinUrl)}</div>
+          <p class="blurb">Enter the 4-digit code on your table card and your name. Every round you share ${S.soldiers} soldiers across 10 castles.</p></div></div>
+        <div class="teams-grid">${S.teams.map((t) => `<div class="tile"><div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong><span class="muted small" style="margin-left:auto">${t.players.length}</span></div>
+          <div class="small muted" style="margin-top:4px">${t.players.length ? t.players.map(esc).join(', ') : 'Waiting for players'}</div></div>`).join('')}</div>`;
+    }
+    if (st === 'active' || st === 'paused') {
+      const subs = S.submissions;
+      const totIn = Object.values(subs).reduce((a, x) => a + x.done, 0), tot = Object.values(subs).reduce((a, x) => a + x.total, 0);
+      return `<div class="spread wrap"><div class="eyebrow">Round ${S.playedCount + 1} of ${S.totalRounds}</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
+        <div class="mode">${esc(r.title)}</div>${r.title !== r.modeName ? `<div class="eyebrow">${esc(r.modeName)}</div>` : ''}
+        <p class="blurb">${esc(r.blurb)}</p>
+        <div class="giant num" data-timer></div>
+        <div class="stack"><div class="spread"><h3>Armies in</h3><span class="num muted">${totIn} of ${tot}</span></div>
+        <div class="teamprog">${S.teams.map((t) => { const s = subs[t.id] || { done: 0, total: 0 }; return `<div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong></div>
+          <div class="pips">${Array.from({ length: s.total }, (_, i) => `<span class="pip" style="${i < s.done ? `background:${esc(t.color)};box-shadow:none` : ''}"></span>`).join('')}</div><span class="num muted small">${s.done}/${s.total}</span>`; }).join('')}</div></div>`;
+    }
+    if (st === 'closed') {
+      return `<div class="eyebrow">${esc(r ? r.title : '')}</div><div class="mode">Time’s up</div><p class="blurb">The armies have met. Results are coming up.</p>`;
+    }
+    const last = S.board.rounds[S.board.rounds.length - 1];
+    if (S.finished) return finale();
+    return last ? roundView(last, true) : '<p class="muted">Waiting for the host.</p>';
+  }
+  function roundView(r, isLatest) {
+    if (!r) return '';
+    const hidden = r.mode === 'beauty' || r.mode === 'shuffled';
+    return `<div class="spread wrap"><div class="eyebrow">Round ${r.n} results${isLatest && !S.finished ? '. Next round coming up' : ''}</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
+      <div class="mode">${esc(r.title)}</div>
+      <div class="stack"><h3>Each table’s best strategy</h3><p class="small muted">Click a table to see every player’s army and score.</p>${CC.teamCards(r, null, { height: 100 })}</div>
+      <div class="stack"><h3>How the room played</h3><p class="small muted">Average soldiers per castle across ${r.participants} armies.${hidden ? ' Gold numbers are the castle values that were revealed.' : ''}</p>
+        <div style="max-width:620px">${skyline({ alloc: r.avgAlloc, color: 'var(--room)', values: hidden ? r.values : null, height: 130 })}</div></div>`;
+  }
+  function overallView() {
+    return `<div class="eyebrow">${S.playedCount} of ${S.totalRounds} rounds played</div><div class="mode">Standings</div>
+      <div class="big-table">${CC.overallTable(S.board, null, { members: true })}</div>`;
+  }
+  function finale() {
+    const o = S.board.overall;
+    const pod = (t, h, place) => t ? `<div><div style="font-weight:800;margin-bottom:6px">${esc(t.name)}</div><div class="pod" style="background:${esc(t.color)};height:${h}px"><b>${ordinal(t.rank)}</b><span class="num">${fmt(t.total)}</span></div></div>` : '<div></div>';
+    return `<div class="eyebrow">Final standings</div><div class="mode">${o[0] ? `${esc(o[0].name)} take the crown` : 'Game over'}</div>
+      <div class="podium" style="margin-top:30px">${pod(o[1], 170)}${pod(o[0], 240)}${pod(o[2], 120)}</div>
+      <p class="blurb muted">Thanks for playing. Tap the round tabs above to look back at each round.</p>`;
+  }
+  function tick() {
+    if (!S) return;
+    const ms = remaining(S);
+    document.querySelectorAll('[data-timer]').forEach((el) => {
+      el.textContent = clock(ms) + (S.status === 'paused' ? ' paused' : '');
+      el.classList.toggle('low', S.status === 'active' && ms <= 10000);
+      el.classList.toggle('paused', S.status === 'paused');
+    });
+  }
+  $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-sel]'); if (b) { sel = b.dataset.sel; render(); } });
+  setInterval(tick, 250);
+  CC.live('/api/events?role=board', () => CC.api('/api/state'), (s) => { if (s) { S = s; render(); } });
+})();
+</script>
+</body>
+</html>
