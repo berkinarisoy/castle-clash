@@ -1,7 +1,7 @@
 # Castle Clash
 
 A live, phone-friendly version of the Colonel Blotto game described in `rules.md`.
-Host it on your laptop or for free online. Players join from their phones with a 4-digit table code.
+Host it on your laptop or for free online. Players join from their phones with the 3-digit room code on the board and a 4-digit table code.
 
 There is nothing to install except Node.js. The game has no dependencies and works without internet once it's running.
 
@@ -95,8 +95,16 @@ You can always override the link shown to players in **Admin → Settings → Jo
 2. **Rounds tab:** choose the rounds, their modes, time limits, multipliers and parameters. Click **Save rounds**.
 3. **Settings tab:** save the whole setup as a named config so you can load it again next time.
    A config includes rounds, settings and (optionally) teams with their codes. You can also download a config as a file and import it later.
-4. Put `/board` on the projector. Players scan the QR code and join.
-5. Click **Start round** in the header. When the timer runs out the round is scored automatically.
+4. Put `/board` on the projector, opened in the same browser where you're logged in to `/admin`.
+   The board then shows the 3-digit **room code**. Players scan the QR code and enter the room code, their table code and their name.
+   The room code changes every time you clear scores (or press **New code** on the Game tab), so people from an earlier session can't join with an old link.
+   Players already in the game stay in when you choose **Clear scores, keep players**.
+5. Click **Start round** in the header. Everyone first sees the round's rules, a worked example and a picture of an example matchup for 30 seconds
+   (change this in Settings, or press **Start now**). Then the timer starts. When it runs out the round is scored automatically.
+   The board plays countdown music during the timer (a march that speeds up in the last 10 seconds, then a gong).
+   Click once anywhere on the board to allow sound; the button in the corner turns it off.
+   After each round the results show a strategy tip for that mode and the best army in hindsight
+   (the army that would have scored highest against everyone's real armies).
    Results appear on the phones and the board, or wait for you to click **Reveal results** if you turned off auto-reveal.
 6. Use **Pause**, **+30 s** or **End now** as needed. **Restart round** clears that round's armies. **Cancel round** throws the round away.
    **Discard** on a played round removes its scores so it can be replayed.
@@ -109,8 +117,9 @@ To start completely fresh, stop the server and delete `data/state.json`.
 ## Rules details
 
 - Players who don't submit sit the round out: they score nothing and nobody plays against them. You can change this in Settings.
-- Players can change their army until the timer ends.
-- A player who reconnects with the same table code and name gets their own seat back, for example after switching phones.
+- Phones have an English / 中文 switch (Traditional Chinese). The board and admin pages stay in English.
+- Players can change their army until the timer ends. They may place fewer soldiers than they have; unplaced soldiers don't fight.
+- A player who reconnects with the current room code, the same table code and the same name gets their own seat back, for example after switching phones.
 - Your score for a round is the average of your scores against every opponent, and that average is the number shown on screen.
 - Team score for a round = the best individual score at that table, times the round's multiplier. Tied teams share a placing.
 

@@ -5,14 +5,14 @@ Castle Clash is a version of **Colonel Blotto**, a strategy game about dividing 
 ## Setup and objective
 
 - There are **n players**, divided into **m teams**.
-- Every player receives **100 soldiers at the start of each round**.
+- Every player receives **100 soldiers at the start of each round** and may place up to all of them.
 - There are **10 castles**, numbered 1 through 10. **Castle i is worth i points.**
 - Each team aims to achieve the **highest total team score across all rounds**.
 
 ## How each round works
 
 1. **Allocate your soldiers.**  
-   Each player submits ten nonnegative whole numbers, representing the soldiers assigned to castles 1 through 10. These numbers must add up to exactly **100**. You may assign zero soldiers to a castle. All allocations remain hidden until everyone has submitted.
+   Each player submits ten nonnegative whole numbers, representing the soldiers assigned to castles 1 through 10. These numbers must add up to **at most 100**. Soldiers you don’t place stay home and don’t fight. You may assign zero soldiers to a castle. All allocations remain hidden until everyone has submitted.
 
 2. **Play every opposing player.**  
    Your submitted allocation is compared separately against the allocation of **every player outside your team**. The same allocation is used for all matchups in that round. At each castle:

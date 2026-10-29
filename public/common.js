@@ -5,6 +5,19 @@ const CC = (() => {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (n) => { const x = Math.round((Number(n) || 0) * 100) / 100; return Number.isInteger(x) ? String(x) : x.toFixed(2).replace(/0$/, ''); };
 
+  // Language for the phone app ('en' or 'zh'). The board and admin pages stay in English.
+  let lang = 'en';
+  function setLang(l) { lang = l === 'zh' ? 'zh' : 'en'; document.documentElement.lang = lang === 'zh' ? 'zh-HK' : 'en'; }
+  const getLang = () => lang;
+  const t = (en, zh) => (lang === 'zh' ? zh : en);
+  // Round and mode texts: the server sends Chinese versions under .zh.
+  const loc = (r, k) => (lang === 'zh' && r && r.zh && r.zh[k]) || (r && r[k]) || '';
+  const titleOf = (r) => (lang === 'zh' && r.zh && r.title === r.modeName ? r.zh.name : r.title);
+  const modeNameOf = (r) => (lang === 'zh' && r.zh ? r.zh.name : r.modeName);
+  const wld = (m) => t(`${m.won}W ${m.lost}L ${m.drawn}D`, `勝${m.won} 負${m.lost} 和${m.drawn}`);
+  const ZH_WORDS = { You: '你', Opponent: '對手', 'Your table': '你的組', 'Other table': '其他組', tie: '平手', alone: '孤立', stalemate: '僵持' };
+  const word = (w) => (lang === 'zh' ? (ZH_WORDS[w] || w.replace(/^\+(\d+) stayed$/, '+$1 留守')) : w);
+
   let offset = 0;
   function sync(state) { if (state && state.now) offset = state.now - Date.now(); }
   function remaining(state) {
@@ -93,67 +106,115 @@ const CC = (() => {
     return s + '</svg>';
   }
 
+  // A worked matchup for the rules: both armies castle by castle, who takes each castle and
+  // what it pays. pic comes from the server (pictureFor in src/modes.js). Phones get two rows
+  // of five castles so the numbers stay readable.
+  function matchPic(pic) {
+    if (!pic) return '';
+    const slot = 46, top = 18, ground = 104, H = 176;
+    const C = { you: 'var(--azure)', them: 'var(--gules)' }, soft = { you: 'var(--azure-soft)', them: 'var(--gules-soft)' };
+    const M = Math.max(20, ...pic.you, ...pic.them);
+    const hOf = (v) => (v > 0 ? 4 + (Math.min(v, M) / M) * (ground - top - 6) : 0);
+    const label = `Example matchup. ${esc(pic.labels[0])}: ${pic.you.join(', ')}. ${esc(pic.labels[1])}: ${pic.them.join(', ')}. Score ${pic.score[0]} to ${pic.score[1]}.`;
+    const draw = (from, to, cls, aria) => {
+    let s = `<svg class="${cls}" viewBox="0 0 ${(to - from) * slot} ${H}" ${aria ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>`;
+    for (let i = from; i < to; i++) {
+      const x = (i - from) * slot, cx = x + slot / 2, c = pic.cells[i] || {}, a = pic.you[i], b = pic.them[i];
+      if (c.win) s += `<rect x="${x + 1}" y="2" width="${slot - 2}" height="${H - 4}" rx="7" fill="${soft[c.win]}" opacity=".7"/>`;
+      const ha = hOf(a), hb = hOf(b);
+      s += `<g opacity="${c.win === 'them' ? .35 : 1}">${tower(x + 6, 15, ground - ha, ha, C.you)}<text x="${x + 13.5}" y="${Math.max(11, ground - ha - 7)}" text-anchor="middle" font-size="10" font-weight="800" fill="${C.you}">${a || ''}</text></g>`;
+      s += `<g opacity="${c.win === 'you' ? .35 : 1}">${tower(x + 25, 15, ground - hb, hb, C.them)}<text x="${x + 32.5}" y="${Math.max(11, ground - hb - 7)}" text-anchor="middle" font-size="10" font-weight="800" fill="${C.them}">${b || ''}</text></g>`;
+      const v = pic.values[i], gold = pic.hiddenValues;
+      s += `<circle cx="${cx}" cy="${ground + 15}" r="10" fill="${gold ? 'var(--or)' : 'var(--paper)'}" stroke="${gold ? 'var(--or)' : 'var(--line)'}"/>`;
+      s += `<text x="${cx}" y="${ground + 19}" text-anchor="middle" font-size="11" font-weight="800" fill="${gold ? '#fff' : 'var(--ink)'}">${v}</text>`;
+      s += `<text x="${cx}" y="${ground + 44}" text-anchor="middle" font-size="13" font-weight="800" fill="${c.win ? C[c.win] : 'var(--muted)'}">${c.win ? (c.pts ? `+${fmt(c.pts)}` : '0') : '–'}</text>`;
+      if (c.note) s += `<text x="${cx}" y="${ground + 61}" text-anchor="middle" font-size="9" font-weight="700" fill="var(--muted)">${esc(word(c.note))}</text>`;
+    }
+    return s + `<line x1="0" x2="${(to - from) * slot}" y1="${ground + .5}" y2="${ground + .5}" stroke="var(--line)"/></svg>`;
+    };
+    const svgs = draw(0, 10, 'mp-wide', true) + `<div class="mp-narrow">${draw(0, 5, '', false)}${draw(5, 10, '', false)}</div>`;
+    const lab = pic.labels.map(word), note = lang === 'zh' && pic.noteZh ? pic.noteZh : pic.note;
+    const key = (k, i) => `<span class="row-flex" style="gap:6px"><i class="mp-swatch" style="background:${C[k]}"></i>${esc(lab[i])}</span>`;
+    return `<figure class="matchpic">
+      <div class="mp-head">${key('you', 0)}${key('them', 1)}<span class="muted">${t('Circles: castle value', '圓圈：城堡分值')}</span></div>
+      ${svgs}
+      <figcaption><div class="mp-score"><span style="color:${C.you}">${esc(lab[0])} ${fmt(pic.score[0])}</span><span class="muted">–</span><span style="color:${C.them}">${fmt(pic.score[1])} ${esc(lab[1])}</span></div>
+        ${note ? `<p>${esc(note)}</p>` : ''}</figcaption></figure>`;
+  }
+
   const shield = (color) => `<span class="banner-shield" style="background:${esc(color)}" aria-hidden="true"></span>`;
 
   // Overall standings. With members, each team gets a row per player showing every round;
   // the score that counted for the team is highlighted and the room's best of the round is starred.
   function overallTable(board, myTeamId, { members = false, totalFirst = false } = {}) {
-    if (!board.overall.length) return '<p class="muted">No teams yet.</p>';
+    if (!board.overall.length) return `<p class="muted">${t('No teams yet.', '尚未有組別。')}</p>`;
     const rounds = board.rounds, showCols = members ? rounds.length > 0 : rounds.length > 1;
     const tops = board.topScores || [];
-    const body = board.overall.map((t) => {
-      let rows = `<tr${t.teamId === myTeamId ? ' style="background:var(--azure-soft)"' : ''}>
-        <td class="rank${t.rank === 1 && t.total > 0 ? ' first' : ''}">${t.rank}</td>
-        <td><div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong></div></td>
-        ${totalFirst ? `<td class="r num tot"><strong>${fmt(t.total)}</strong></td>` : ''}
-        ${showCols ? t.perRound.map((v) => `<td class="r num"><strong>${fmt(v)}</strong></td>`).join('') : ''}
-        ${totalFirst ? '' : `<td class="r num"><strong>${fmt(t.total)}</strong></td>`}</tr>`;
-      if (members && t.members && t.members.length) {
-        const best = rounds.map((_, k) => Math.max(...t.members.map((m) => (m.perRound[k] == null ? -Infinity : m.perRound[k]))));
-        rows += t.members.map((m) => `<tr class="sub"><td></td><td class="pname">${esc(m.name)}</td>${totalFirst ? `<td class="r num tot">${fmt(m.total)}</td>` : ''}
+    const body = board.overall.map((team) => {
+      let rows = `<tr${team.teamId === myTeamId ? ' style="background:var(--azure-soft)"' : ''}>
+        <td class="rank${team.rank === 1 && team.total > 0 ? ' first' : ''}">${team.rank}</td>
+        <td><div class="row-flex">${shield(team.color)}<strong>${esc(team.name)}</strong></div></td>
+        ${totalFirst ? `<td class="r num tot"><strong>${fmt(team.total)}</strong></td>` : ''}
+        ${showCols ? team.perRound.map((v) => `<td class="r num"><strong>${fmt(v)}</strong></td>`).join('') : ''}
+        ${totalFirst ? '' : `<td class="r num"><strong>${fmt(team.total)}</strong></td>`}</tr>`;
+      if (members && team.members && team.members.length) {
+        const best = rounds.map((_, k) => Math.max(...team.members.map((m) => (m.perRound[k] == null ? -Infinity : m.perRound[k]))));
+        rows += team.members.map((m) => `<tr class="sub"><td></td><td class="pname">${esc(m.name)}</td>${totalFirst ? `<td class="r num tot">${fmt(m.total)}</td>` : ''}
           ${showCols ? m.perRound.map((v, k) => {
             if (v == null) return '<td class="r">–</td>';
             const hi = v === best[k] && v > 0, star = v === tops[k] && v > 0;
-            return `<td class="r num">${hi ? `<span class="hi" title="Counted for ${esc(t.name)}">${fmt(v)}</span>` : fmt(v)}${star ? '<span class="star" title="Best in the room">★</span>' : ''}</td>`;
+            return `<td class="r num">${hi ? `<span class="hi" title="${t('Counted for', '計入')} ${esc(team.name)}">${fmt(v)}</span>` : fmt(v)}${star ? `<span class="star" title="${t('Best in the room', '全場最高')}">★</span>` : ''}</td>`;
           }).join('') : ''}
           ${totalFirst ? '' : `<td class="r num">${fmt(m.total)}</td>`}</tr>`).join('');
       }
       return rows;
     }).join('');
     const legend = members && rounds.length
-      ? '<div class="legend" style="margin-top:8px"><span><i style="background:var(--or-soft);box-shadow:inset 0 0 0 1px var(--or)"></i>Counted for the team</span><span>★ Best in the room that round</span><span>Player totals are their own scores added up</span></div>' : '';
-    return `<div style="overflow-x:auto"><table class="list"><thead><tr><th></th><th>${members ? 'Team and players' : 'Team'}</th>${totalFirst ? '<th class="r tot">Total</th>' : ''}${showCols ? rounds.map((r) => `<th class="r small" title="${esc(r.title)}">R${r.n}</th>`).join('') : ''}${totalFirst ? '' : '<th class="r">Total</th>'}</tr></thead><tbody>${body}</tbody></table></div>${legend}`;
+      ? `<div class="legend" style="margin-top:8px"><span><i style="background:var(--or-soft);box-shadow:inset 0 0 0 1px var(--or)"></i>${t('Counted for the team', '計入組別得分')}</span><span>★ ${t('Best in the room that round', '該回合全場最高')}</span><span>${t('Player totals are their own scores added up', '玩家總分是自己各回合得分的總和')}</span></div>` : '';
+    return `<div style="overflow-x:auto"><table class="list"><thead><tr><th></th><th>${members ? t('Team and players', '組別及玩家') : t('Team', '組別')}</th>${totalFirst ? `<th class="r tot">${t('Total', '總分')}</th>` : ''}${showCols ? rounds.map((r) => `<th class="r small" title="${esc(r.title)}">R${r.n}</th>`).join('') : ''}${totalFirst ? '' : `<th class="r">${t('Total', '總分')}</th>`}</tr></thead><tbody>${body}</tbody></table></div>${legend}`;
   }
 
   // One card per team: its best strategy, and (expandable) every member's army and score.
   function teamCards(r, myTeamId, { open = false, height = 90 } = {}) {
-    const max = Math.max(1, ...r.teams.map((t) => t.score));
+    const max = Math.max(1, ...r.teams.map((tm) => tm.score));
     const alliance = r.mode === 'alliance';
-    return `<div class="team-cards">${r.teams.map((t) => {
-      const best = t.members[0];
-      const head = `<div class="spread"><span class="row-flex"><span class="rank${t.rank === 1 && t.score > 0 ? ' first' : ''}">${t.rank}</span>${shield(t.color)}<strong>${esc(t.name)}</strong></span><strong class="num" style="font-size:1.15rem">${fmt(t.score)}</strong></div>
-        <div class="bar-track" style="margin:6px 0 8px"><div class="bar-fill" style="width:${(t.score / max) * 100}%;background:${esc(t.color)}"></div></div>`;
-      if (!best) return `<div class="tcard" style="--team:${esc(t.color)}">${head}<p class="tiny muted">No armies from this table.</p></div>`;
-      const bestArmy = alliance && t.teamArmy ? t.teamArmy : best.army;
-      const caption = alliance ? `Team army, the average of ${t.members.length}` : `Best strategy: ${esc(best.name)}, ${fmt(best.score)} pts`;
-      const list = t.members.map((m, i) => `<div class="member"><span><strong>${esc(m.name)}</strong>${!alliance && i === 0 ? ' <span class="counted tiny">counted</span>' : ''}</span>
-          <span class="num small"><strong>${fmt(m.score)}</strong> <span class="muted tiny">${m.won}W ${m.lost}L ${m.drawn}D</span></span>
-          <div class="sky">${skyline({ alloc: m.army, color: t.color, height: 78, max: Math.max(30, ...m.army) })}</div></div>`).join('');
-      return `<details class="tcard${t.teamId === myTeamId ? ' mine' : ''}" data-team="${t.teamId}" style="--team:${esc(t.color)}"${open ? ' open' : ''}>
-        <summary>${head}<div class="tiny muted">${caption}</div>${skyline({ alloc: bestArmy, color: t.color, height, max: Math.max(30, ...bestArmy) })}
-          <span class="more more-closed">Show all ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span><span class="more more-open">Hide players</span></summary>
+    return `<div class="team-cards">${r.teams.map((tm) => {
+      const best = tm.members[0];
+      const head = `<div class="spread"><span class="row-flex"><span class="rank${tm.rank === 1 && tm.score > 0 ? ' first' : ''}">${tm.rank}</span>${shield(tm.color)}<strong>${esc(tm.name)}</strong></span><strong class="num" style="font-size:1.15rem">${fmt(tm.score)}</strong></div>
+        <div class="bar-track" style="margin:6px 0 8px"><div class="bar-fill" style="width:${(tm.score / max) * 100}%;background:${esc(tm.color)}"></div></div>`;
+      if (!best) return `<div class="tcard" style="--team:${esc(tm.color)}">${head}<p class="tiny muted">${t('No armies from this table.', '這組沒有提交軍隊。')}</p></div>`;
+      const bestArmy = alliance && tm.teamArmy ? tm.teamArmy : best.army;
+      const caption = alliance ? t(`Team army, the average of ${tm.members.length}`, `組軍：${tm.members.length} 人的平均`) : t(`Best strategy: ${esc(best.name)}, ${fmt(best.score)} pts`, `最佳策略：${esc(best.name)}，${fmt(best.score)} 分`);
+      const list = tm.members.map((m, i) => `<div class="member"><span><strong>${esc(m.name)}</strong>${!alliance && i === 0 ? ` <span class="counted tiny">${t('counted', '計分')}</span>` : ''}</span>
+          <span class="num small"><strong>${fmt(m.score)}</strong> <span class="muted tiny">${wld(m)}</span></span>
+          <div class="sky">${skyline({ alloc: m.army, color: tm.color, height: 78, max: Math.max(30, ...m.army) })}</div></div>`).join('');
+      return `<details class="tcard${tm.teamId === myTeamId ? ' mine' : ''}" data-team="${tm.teamId}" style="--team:${esc(tm.color)}"${open ? ' open' : ''}>
+        <summary>${head}<div class="tiny muted">${caption}</div>${skyline({ alloc: bestArmy, color: tm.color, height, max: Math.max(30, ...bestArmy) })}
+          <span class="more more-closed">${t(`Show all ${tm.members.length} player${tm.members.length === 1 ? '' : 's'}`, `顯示全部 ${tm.members.length} 名玩家`)}</span><span class="more more-open">${t('Hide players', '隱藏玩家')}</span></summary>
         ${list}</details>`;
     }).join('')}</div>`;
+  }
+
+  // After a round: the mode's strategy idea and the best army in hindsight against this room.
+  function strategyBox(r) {
+    if (!r.tip && !r.hindsight) return '';
+    const h = r.hindsight, hidden = r.mode === 'beauty' || r.mode === 'shuffled';
+    return `<div class="strategy stack"><h3>${t('Strategy idea', '策略提示')}</h3>${r.tip ? `<p>${esc(loc(r, 'tip'))}</p>` : ''}
+      ${h ? `<div><p class="small">${t(`<strong>Best army in hindsight:</strong> against the armies submitted this round it would have averaged
+        <strong>${fmt(h.score)}</strong>${h.score > r.topScore ? ` (the best player in the room got ${fmt(r.topScore)})` : ''}.`,
+        `<strong>事後最佳軍隊：</strong>對本回合提交的所有軍隊，它的平均分會是 <strong>${fmt(h.score)}</strong>${h.score > r.topScore ? `（全場最佳玩家得 ${fmt(r.topScore)} 分）` : ''}。`)}</p>
+        ${skyline({ alloc: h.alloc, color: 'var(--vert)', values: hidden ? r.values : null, max: Math.max(30, ...h.alloc), height: hidden ? 120 : 100 })}</div>` : ''}</div>`;
   }
 
   function roundDetail(r, myTeamId) {
     const hidden = r.mode === 'beauty' || r.mode === 'shuffled';
     return `<div class="stack-lg">
-      <div class="stack"><div class="spread"><h3>${esc(r.title)}</h3>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
-      <p class="small muted">${esc(r.blurb)}</p></div>
+      <div class="stack"><div class="spread"><h3>${esc(titleOf(r))}</h3>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} ${t('points', '分')}</span>` : ''}</div>
+      <p class="small muted">${esc(loc(r, 'blurb'))}</p></div>
       ${teamCards(r, myTeamId)}
-      <div><h3 style="margin-bottom:6px">How the room played</h3>
-        <p class="tiny muted" style="margin-bottom:6px">Average soldiers per castle across ${r.participants} armies.${hidden ? ' Gold numbers are the castle values that were revealed.' : ''}</p>
+      ${strategyBox(r)}
+      <div><h3 style="margin-bottom:6px">${t('How the room played', '全場部署')}</h3>
+        <p class="tiny muted" style="margin-bottom:6px">${t(`Average soldiers per castle across ${r.participants} armies.`, `${r.participants} 支軍隊在每座城堡的平均士兵數。`)}${hidden ? t(' Gold numbers are the castle values that were revealed.', '金色數字是揭曉的城堡分值。') : ''}</p>
         <div style="max-width:560px">${skyline({ alloc: r.avgAlloc, color: 'var(--room)', values: hidden ? r.values : null })}</div></div>
     </div>`;
   }
@@ -172,5 +233,5 @@ const CC = (() => {
     return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true, alt: 'QR code for ' + text });
   }
 
-  return { qr, $, $$, esc, fmt, sync, remaining, clock, api, live, toast, skyline, shield, overallTable, roundDetail, teamCards, setHTML };
+  return { qr, $, $$, esc, fmt, setLang, getLang, t, loc, titleOf, modeNameOf, wld, sync, remaining, clock, api, live, toast, skyline, matchPic, shield, overallTable, roundDetail, strategyBox, teamCards, setHTML };
 })();

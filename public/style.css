@@ -145,3 +145,16 @@ table.list tr.sub:last-of-type td { padding-bottom: 10px; }
 table.list td .hi { display: inline-block; min-width: 2.4em; text-align: right; padding: 1px 6px; border-radius: 7px; background: var(--or-soft); color: var(--ink); font-weight: 800; }
 table.list td .star { color: var(--or); font-size: .75em; margin-left: 2px; }
 table.list .tot { border-right: 1px solid var(--line); padding-right: 10px; }
+
+/* Worked matchup pictures shown with the rules */
+.matchpic { margin: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: left; }
+.matchpic svg { display: block; width: 100%; height: auto; margin: 8px 0 4px; }
+.mp-head { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; font-weight: 700; }
+.mp-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.mp-score { display: flex; gap: 10px; align-items: baseline; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.mp-narrow { display: none; }
+@media (max-width: 560px) { .matchpic .mp-wide { display: none; } .mp-narrow { display: block; } }
+.matchpic figcaption p { font-size: .875rem; color: var(--muted); margin-top: 4px; }
+.strategy { background: var(--vert-soft); border-radius: 12px; padding: 14px 16px; }
+.strategy h3 { color: var(--vert); }
+.langbtn { border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .85rem; font-weight: 800; cursor: pointer; }

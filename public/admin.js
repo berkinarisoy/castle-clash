@@ -160,6 +160,8 @@
   }
   function joinPanel() {
     return `<section class="panel stack"><h2>Players join at</h2>
+      <div class="spread"><div><span class="small muted">Room code (changes on every reset)</span><div class="num" style="font-size:2.2rem;font-weight:850;letter-spacing:.1em;color:var(--azure)">${esc(S.roomCode)}</div></div>
+        <button class="btn ghost small" data-act="room/new" data-confirm="Make a new room code? Players already in stay in; anyone joining needs the new code." data-msg="New room code">New code</button></div>
       <div class="row-flex" style="align-items:flex-start"><div style="width:110px;background:#fff;padding:6px;border-radius:12px;flex:none">${qr(S.joinUrl)}</div>
       <div class="stack grow"><strong style="word-break:break-all">${esc(S.joinUrl)}</strong>
       ${S.lanUrls.length > 1 ? `<p class="tiny muted">Other addresses for this laptop: ${S.lanUrls.slice(1).map(esc).join(', ')}</p>` : ''}
@@ -260,9 +262,9 @@
             <span class="tiny muted" style="display:block;margin-top:4px">Leave empty to use this laptop’s Wi-Fi address. Fill it in if you use a tunnel or a different network.</span></label>
           <div class="control"><button class="btn" type="submit">Save settings</button></div>
         </form></section>
-      <section class="panel stack"><h2>Start over</h2><p class="small muted">Clear all scores and submissions. Teams, codes and rounds stay as they are.</p>
-        <div class="control"><button class="btn ghost small" data-act="game/reset" data-confirm="Clear all scores and submissions? Players stay at their tables." data-msg="Scores cleared">Clear scores, keep players</button>
-        <button class="btn danger small" data-act="game/reset" data-body='{"removePlayers":true}' data-confirm="Clear all scores AND remove every player? Teams and codes stay." data-msg="Game reset">Clear scores and players</button></div></section>
+      <section class="panel stack"><h2>Start over</h2><p class="small muted">Clear all scores and submissions. Teams, table codes and rounds stay as they are. The room code changes, so old links can’t be used to join.</p>
+        <div class="control"><button class="btn ghost small" data-act="game/reset" data-confirm="Clear all scores and submissions? Players stay at their tables. A new room code is made." data-msg="Scores cleared">Clear scores, keep players</button>
+        <button class="btn danger small" data-act="game/reset" data-body='{"removePlayers":true}' data-confirm="Clear all scores AND remove every player? Teams and table codes stay. A new room code is made, so everyone must join again with it." data-msg="Game reset">Clear scores and players</button></div></section>
     </div><div class="stack-lg">
       <section class="panel stack"><h2>Saved configs</h2><p class="small muted">A config stores the rounds, the settings and (optionally) the teams with their codes, so you can reuse them at the next event.</p>
         <form class="row-flex wrap" id="savePreset"><input type="text" id="presetName" placeholder="Config name, e.g. Math Club night" maxlength="60" style="flex:1;min-width:180px"><button class="btn" type="submit">Save current</button></form>
@@ -384,7 +386,7 @@
     const cards = S.adminTeams.map((t) => `<div class="card"><div class="bar" style="background:${esc(t.color)}"></div>
       <div class="team">${esc(t.name)}</div><div class="code">${esc(t.code)}</div>
       <div class="qr">${qr(`${base}/?code=${t.code}`)}</div>
-      <p>Scan, or open <b>${esc(base)}</b><br>and enter code <b>${esc(t.code)}</b> with your name.</p></div>`).join('');
+      <p>Scan, or open <b>${esc(base)}</b><br>and enter the room code from the big screen,<br>table code <b>${esc(t.code)}</b> and your name.</p></div>`).join('');
     const w = window.open('', '_blank');
     if (!w) { toast('Allow pop-ups to print the cards.', true); return; }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Table cards</title><style>

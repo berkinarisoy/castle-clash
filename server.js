@@ -59,8 +59,15 @@ function defaultSettings() {
     allowJoin: true, showTeammates: true, publicUrl: '', briefingSeconds: 30,
   };
 }
+// The 3-digit room code players type when joining. Shown only on the board (via the admin
+// key) and the admin page, and replaced on every reset so old links stop working.
+function newRoomCode(old) {
+  for (;;) { const c = String(crypto.randomInt(100, 1000)); if (c !== old) return c; }
+}
+function rotateRoomCode() { S.roomCode = newRoomCode(S.roomCode); S.roomVersion = (S.roomVersion || 0) + 1; }
 function freshState() {
   return {
+    roomCode: newRoomCode(), roomVersion: 1,
     settings: defaultSettings(),
     teams: [],
     players: [],
@@ -194,13 +201,12 @@ function closeRound() {
   const r = curRound();
   if (!r) return;
   clearTimeout(roundTimer);
-  const res = M.scoreRound({
-    round: r, entries: entriesFor(r), teams: S.teams, soldiers: S.settings.soldiers,
-    prev: prevAllocsFor(r.id), secret: S.secrets[r.id] || {},
-  });
+  const entries = entriesFor(r), prev = prevAllocsFor(r.id), secret = S.secrets[r.id] || {};
+  const res = M.scoreRound({ round: r, entries, teams: S.teams, soldiers: S.settings.soldiers, prev, secret });
+  const hindsight = M.hindsight({ round: r, entries, soldiers: S.settings.soldiers, prev, secret, values: res.values });
   S.results[r.id] = {
     ...res, roundId: r.id, title: displayTitle(r), mode: r.mode, modeName: M.modeOf(r.mode).name,
-    blurb: M.blurbFor(r), playedAt: now(), revealed: false,
+    blurb: M.blurbFor(r), tip: M.tipFor(r), zh: M.zhFor(r), hindsight, playedAt: now(), revealed: false,
     teamNames: Object.fromEntries(S.teams.map((t) => [t.id, { name: t.name, color: t.color }])),
   };
   if (!S.history.includes(r.id)) S.history.push(r.id);
@@ -221,7 +227,7 @@ function roundPublic(r, index) {
   const rules = M.roundRules(r), m = M.modeOf(r.mode);
   return {
     id: r.id, index, number: index + 1, title: displayTitle(r), modeName: m.name, mode: r.mode, style: m.style,
-    blurb: M.blurbFor(r), example: M.exampleFor(r), duration: r.duration, multiplier: r.multiplier, params: M.paramsFor(r),
+    blurb: M.blurbFor(r), example: M.exampleFor(r), picture: M.pictureFor(r), zh: M.zhFor(r), duration: r.duration, multiplier: r.multiplier, params: M.paramsFor(r),
     budget: rules.budget, primesOnly: rules.primesOnly, hiddenValues: rules.hiddenValues,
     teamLevel: !!m.teamLevel, usesHistory: !!m.usesHistory,
   };
@@ -257,6 +263,8 @@ function computeLeaderboard(includeHidden) {
       roundId: res.roundId, n: k + 1, title: res.title, modeName: res.modeName, mode: res.mode, blurb: res.blurb,
       multiplier: res.multiplier, values: res.values, avgAlloc: res.avgAlloc, participants: res.participants,
       reveal: { perm: res.reveal && res.reveal.perm, totals: res.reveal && res.reveal.totals }, teams: teamsRows, top, topScore, revealed: res.revealed,
+      tip: res.tip || M.tipFor({ mode: res.mode, params: res.params }), hindsight: res.hindsight || null,
+      zh: res.zh || M.zhFor({ mode: res.mode, params: res.params }),
     };
   });
   const overall = rankRows(S.teams.map((t) => {
@@ -295,7 +303,8 @@ function publicView() {
     now: now(), title: S.settings.title, soldiers: S.settings.soldiers, joinUrl: joinUrl(),
     status: S.current.status, remainingMs: remainingMs(), endsAt: S.current.status === 'active' ? S.current.endsAt : null,
     briefingEndsAt: S.current.status === 'briefing' ? S.current.briefingEndsAt : null,
-    round: roundPublic(r, S.current.index), playedCount: S.history.length, totalRounds: S.rounds.length,
+    roomVersion: S.roomVersion, // tells the board to fetch a new room code; the code itself stays private
+    round: roundPublic(r, S.current.index), basicPicture: M.pictureFor({ mode: 'classic' }), playedCount: S.history.length, totalRounds: S.rounds.length,
     finished: nu === -1 && S.current.status === 'revealed', fresh: isFresh(),
     teams: S.teams.map((t) => ({ id: t.id, name: t.name, color: t.color, players: S.players.filter((p) => p.teamId === t.id).map((p) => p.name) })),
     submissions: submissionStatus(),
@@ -341,6 +350,7 @@ function adminView() {
   v.adminTeams = S.teams.map((t) => ({ ...t, players: S.players.filter((p) => p.teamId === t.id).map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, joinedAt: p.joinedAt })) }));
   v.rounds = S.rounds.map((r, i) => ({ ...r, played: !!S.results[r.id], playOrder: S.history.indexOf(r.id) + 1 || null, displayTitle: displayTitle(r), current: S.current.roundId === r.id }));
   v.settings = S.settings;
+  v.roomCode = S.roomCode;
   v.modes = M.catalog();
   v.presets = presetList();
   v.lanUrls = lanUrls();
@@ -389,12 +399,16 @@ function send(res, code, obj) {
   res.end(body);
 }
 const fileCache = new Map(); // path -> {mtime, raw, gz}
+// Pages link scripts and styles as /static/x.js?v=BOOT, so phones fetch fresh copies after a
+// restart instead of running cached code against a newer server.
+const BOOT = Date.now().toString(36);
 function serveFile(res, file, cacheSeconds = 0) {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
     let entry = fileCache.get(file);
     if (!entry || entry.mtime !== st.mtimeMs) {
-      const raw = fs.readFileSync(file);
+      let raw = fs.readFileSync(file);
+      if (file.endsWith('.html')) raw = Buffer.from(raw.toString().replace(/(["'])(\/static\/[\w./-]+\.(?:js|css))\1/g, `$1$2?v=${BOOT}$1`));
       entry = { mtime: st.mtimeMs, raw, gz: /\.(html|js|css|svg|json)$/.test(file) ? zlib.gzipSync(raw) : null };
       fileCache.set(file, entry);
     }
@@ -538,7 +552,9 @@ const actions = {
     S.history = []; S.results = {}; S.submissions = {}; S.secrets = {};
     S.current = { index: -1, roundId: null, status: 'lobby', endsAt: null, remainingMs: null, startedAt: null };
     if (b.removePlayers) S.players = [];
+    rotateRoomCode();
   },
+  'room/new': () => rotateRoomCode(),
   'bots/add': (b) => {
     const n = Math.max(1, Math.min(10, Number(b.perTeam) || 2));
     const names = ['Ada', 'Bo', 'Cy', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo'];
@@ -638,8 +654,10 @@ const server = http.createServer(async (req, res) => {
       const code = String(b.code || '').trim();
       const name = cleanName(b.name);
       if (!name) return send(res, 400, { error: 'Enter your name.' });
+      const fail = (error) => { fails.push(now()); failedJoins.set(ip, fails); globalFails.push(now()); return send(res, 400, { error }); };
+      if (String(b.room || '').trim() !== S.roomCode) return fail('Wrong room code. Use the 3-digit number on the big screen.');
       const t = S.teams.find((x) => x.code === code);
-      if (!t) { fails.push(now()); failedJoins.set(ip, fails); globalFails.push(now()); return send(res, 400, { error: 'That code doesn’t match any table. Check the card on your table.' }); }
+      if (!t) return fail('That code doesn’t match any table. Check the card on your table.');
       const existing = S.players.find((x) => x.teamId === t.id && x.name.toLowerCase() === name.toLowerCase());
       if (existing) return send(res, 200, { token: existing.token, rejoined: true });
       if (!S.settings.allowJoin) return send(res, 403, { error: 'Joining is closed right now. Ask the host.' });
@@ -678,6 +696,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && action === 'backup') return send(res, 200, makeBackup());
       if (req.method === 'POST' && action === 'restore') { const b = await readBody(req); restoreBackup(b.backup); changed(); return send(res, 200, { ok: true }); }
       if (req.method === 'GET' && action === 'state') return send(res, 200, adminView());
+      if (req.method === 'GET' && action === 'room') return send(res, 200, { roomCode: S.roomCode, roomVersion: S.roomVersion });
       if (req.method === 'GET' && action === 'export') return send(res, 200, buildPreset(url.searchParams.get('name') || S.settings.title, url.searchParams.get('teams') !== '0'));
       if (req.method === 'GET' && action === 'preset') {
         const f = path.join(PRESETS, slug(url.searchParams.get('file')) + '.json');

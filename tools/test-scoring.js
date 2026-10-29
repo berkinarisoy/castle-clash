@@ -60,7 +60,9 @@ ok('primes validation', () => {
   for (let i = 0; i < 200; i++) assert.strictEqual(M.validate(M.randomAlloc(rd, 100), rd, 100), null);
 });
 ok('budget validation', () => {
-  assert.ok(M.validate([10, 10, 10, 10, 10, 10, 10, 10, 10, 9], { mode: 'classic' }, 100));
+  assert.strictEqual(M.validate([10, 10, 10, 10, 10, 10, 10, 10, 10, 9], { mode: 'classic' }, 100), null, 'fewer than 100 is fine');
+  assert.ok(M.validate([10, 10, 10, 10, 10, 10, 10, 10, 10, 11], { mode: 'classic' }, 100), 'more than 100 is not');
+  for (const id of Object.keys(M.MODES)) assert.strictEqual(M.validate([5, 0, 0, 0, 0, 0, 0, 0, 0, 0], { mode: id }, 100), null, 'under budget in ' + id);
   assert.strictEqual(M.validate([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { mode: 'warchest' }, 100), null);
   assert.ok(M.validate([0, 0, 0, 0, 0, 0, 0, 0, 0, 101], { mode: 'warchest' }, 100));
   for (const id of Object.keys(M.MODES)) for (let i = 0; i < 50; i++) { const rd = { mode: id }; assert.strictEqual(M.validate(M.randomAlloc(rd, 100), rd, 100), null, id); }
@@ -113,4 +115,48 @@ ok('decisive needs more than double', () => {
 ok('winner takes all', () => { const r = run('winnerall', pair(A, B)); assert.strictEqual(r.players.b.score, 55); assert.strictEqual(r.players.a.score, 0); });
 ok('catalog has 13 modes with blurbs', () => { const c = M.catalog(); assert.strictEqual(c.length, 13); c.forEach((m) => assert.ok(m.blurb.length > 20)); });
 ok('every mode has a worked example', () => { for (const m of M.catalog()) assert.ok(m.example.length > 40, m.id); });
+ok('rule pictures agree with the real scoring', () => {
+  const bonus = new Set(['blackjack', 'warchest', 'winnerall']); // these change the total on purpose
+  for (const id of Object.keys(M.MODES)) {
+    const p = M.pictureFor({ mode: id });
+    assert.ok(p && p.note, id);
+    assert.ok(p.you.length === 10 && p.them.length === 10 && p.cells.length === 10, id);
+    const sum = [0, 0];
+    for (const c of p.cells) if (c.win) sum[c.win === 'you' ? 0 : 1] += c.pts;
+    if (!bonus.has(id)) assert.deepStrictEqual(sum, p.score, id);
+  }
+  assert.deepStrictEqual(M.pictureFor({ mode: 'blackjack' }).score, [0, 21], 'picture shows the bust');
+  assert.deepStrictEqual(M.pictureFor({ mode: 'blackjack', params: { cap: 30 } }).score, [27, 21], 'picture follows the limit');
+});
+ok('every mode has a strategy tip and Chinese texts', () => {
+  for (const id of Object.keys(M.MODES)) {
+    assert.ok(M.tipFor({ mode: id }).length > 40, id);
+    const z = M.zhFor({ mode: id });
+    assert.ok(z && z.name && z.blurb && z.example && z.tip && M.pictureFor({ mode: id }).noteZh, 'zh ' + id);
+  }
+});
+ok('hindsight finds an army at least as good as anyone in the room', () => {
+  const t3 = [{ id: 't1' }, { id: 't2' }, { id: 't3' }];
+  for (const mode of Object.keys(M.MODES)) {
+    if (M.MODES[mode].teamLevel) { assert.strictEqual(M.hindsight({ round: { mode }, entries: [{ alloc: A }], soldiers: 100 }), null); continue; }
+    const entries = [];
+    t3.forEach((t, k) => { for (let j = 0; j < 4; j++) entries.push({ playerId: t.id + j, name: 'x', teamId: t.id, alloc: M.randomAlloc({ mode }, 100) }); });
+    const secret = M.MODES[mode].prepare ? M.MODES[mode].prepare() : {};
+    const res = M.scoreRound({ round: { mode }, entries, teams: t3, soldiers: 100, secret });
+    const h = M.hindsight({ round: { mode }, entries, soldiers: 100, secret, values: res.values, timeMs: 120 });
+    assert.strictEqual(M.validate(h.alloc, { mode }, 100), null, 'valid army in ' + mode);
+    // playing everyone (incl. own table) can differ slightly from the real players' schedule, so allow a small margin
+    assert.ok(h.score >= Math.max(...Object.values(res.players).map((p) => p.score)) - 3, mode);
+  }
+});
+ok('attrition: all-in on castle 1 is never beaten and never loses a castle', () => {
+  const all1 = [100, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < 200; i++) {
+    const o = M.randomAlloc({ mode: i % 2 ? 'classic' : 'warchest' }, 100);
+    const { a: { score: a }, b: { score: b } } = run('attrition', pair(all1, o)).players;
+    assert.strictEqual(b, 0);
+    const h = M.hindsight({ round: { mode: 'attrition' }, entries: [{ playerId: 'o', teamId: 'x', alloc: o }], soldiers: 100, timeMs: 30 });
+    assert.ok(h.score <= a + 1e-9, 'beaten by ' + h.alloc);
+  }
+});
 console.log(`\n${n} scoring tests passed.`);

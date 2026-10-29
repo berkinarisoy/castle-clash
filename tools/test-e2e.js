@@ -38,14 +38,24 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
     const pub = JSON.stringify(await call('/api/state'));
     for (const t of teams) assert.ok(!pub.includes(`"code":"${t.code}"`), 'codes hidden from public');
 
+    // room code: 3 digits, admin-only, needed to join
+    const room = st.roomCode;
+    assert.ok(/^\d{3}$/.test(room), 'room code has 3 digits');
+    assert.ok(!('roomCode' in (await call('/api/state'))), 'room code hidden from public state');
+    assert.strictEqual((await call('/api/admin/room')).status, 401, 'room code needs the admin key');
+    assert.strictEqual((await call('/api/admin/room', { headers: { 'x-admin-key': PW } })).roomCode, room);
+    const wrongRoom = room === '999' ? '998' : String(Number(room) + 1);
+    assert.strictEqual((await call('/api/join', { method: 'POST', body: { room: wrongRoom, code: teams[0].code, name: 'X' } })).status, 400, 'wrong room code');
+    assert.strictEqual((await call('/api/join', { method: 'POST', body: { code: teams[0].code, name: 'X' } })).status, 400, 'missing room code');
+
     // joining
-    assert.strictEqual((await call('/api/join', { method: 'POST', body: { code: '0000', name: 'X' } })).status, 400);
+    assert.strictEqual((await call('/api/join', { method: 'POST', body: { room, code: '0000', name: 'X' } })).status, 400);
     const players = [];
     for (const t of teams) for (const n of ['Ann', 'Ben', 'Cat']) {
-      const r = await call('/api/join', { method: 'POST', body: { code: t.code, name: `${n} ${t.name}` } });
+      const r = await call('/api/join', { method: 'POST', body: { room, code: t.code, name: `${n} ${t.name}` } });
       assert.ok(r.token, 'join ok'); players.push({ token: r.token, team: t.id });
     }
-    const again = await call('/api/join', { method: 'POST', body: { code: teams[0].code, name: 'ann red' } });
+    const again = await call('/api/join', { method: 'POST', body: { room, code: teams[0].code, name: 'ann red' } });
     assert.strictEqual(again.token, players[0].token, 'rejoin reclaims');
     const me = await call('/api/state', { headers: { 'x-player-token': players[0].token } });
     assert.strictEqual(me.me.teamName, 'Red');
@@ -89,8 +99,8 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
       const mode = modes[i];
       assert.strictEqual((await admin('game/start')).ok, true, 'start ' + mode);
       // invalid submit
-      const bad = await sub(players[0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
-      if (mode !== 'warchest') assert.strictEqual(bad.status, 400, 'reject bad sum in ' + mode);
+      const bad = await sub(players[0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 92]);
+      assert.strictEqual(bad.status, 400, 'reject more than 100 in ' + mode);
       for (const [k, p] of players.entries()) {
         if (k === 8) continue; // one player sits out
         const r = await sub(p, M.randomAlloc({ mode }, 100));
@@ -109,6 +119,8 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
         const mem = Object.values(r.players).filter((p) => p.teamId === t.id).map((p) => p.score);
         assert.strictEqual(r.teamScores[t.id], Math.round(Math.max(0, ...mem) * 100) / 100, `team max ${mode}`);
       }
+      assert.ok(lb.tip && lb.tip.length > 40 && lb.zh && lb.zh.tip, 'strategy tip for ' + mode);
+      if (mode !== 'alliance') assert.ok(lb.hindsight && lb.hindsight.alloc.length === 10, 'hindsight army for ' + mode);
       console.log(`  ✓ ${mode.padEnd(13)} team scores: ${lb.teams.map((t) => `${t.name} ${t.score}`).join(', ')}`);
     }
     st = await astate();
@@ -173,6 +185,20 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
     assert.strictEqual((await admin('restore', { backup: { nope: 1 } })).status, 400);
     assert.strictEqual((await call('/api/ping')).ok, true);
     console.log('  ✓ backup, wipe, restore (players keep their seats)');
+
+    // every reset makes a new room code; 'keep players' keeps their seats
+    const oldRoom = (await astate()).roomCode, oldVersion = (await call('/api/state')).roomVersion;
+    await admin('game/reset');
+    st = await astate();
+    assert.notStrictEqual(st.roomCode, oldRoom, 'reset changes the room code');
+    assert.ok((await call('/api/state')).roomVersion > oldVersion, 'board is told to refetch');
+    const tcode = st.adminTeams[0].code;
+    assert.strictEqual((await call('/api/join', { method: 'POST', body: { room: oldRoom, code: tcode, name: 'Late' } })).status, 400, 'old room code rejected');
+    assert.ok((await call('/api/join', { method: 'POST', body: { room: st.roomCode, code: tcode, name: 'Late' } })).token, 'new room code works');
+    assert.ok((await call('/api/state', { headers: { 'x-player-token': backup.state.players[0].token } })).me, 'kept players stay in');
+    assert.ok((await admin('room/new')).ok);
+    assert.notStrictEqual((await astate()).roomCode, st.roomCode, 'host can make a new code');
+    console.log('  ✓ room code: private, required, changes on reset');
 
     // rate limit on wrong codes
     let last;

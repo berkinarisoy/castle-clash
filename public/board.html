@@ -19,6 +19,7 @@
   .blurb { font-size: clamp(1.05rem, 1.6vw, 1.4rem); max-width: 46em; color: var(--ink); }
   .example { max-width: 46em; margin-top: 14px; padding: 14px 18px; border-left: 5px solid var(--or); background: var(--paper); border-radius: 10px; font-size: clamp(1rem, 1.4vw, 1.25rem); }
   .example b { display: block; font-size: .8em; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .matchpic { max-width: 46em; margin-top: 16px; }
   .giant { font-size: clamp(5rem, 15vw, 13rem); font-weight: 850; line-height: .9; letter-spacing: -.05em; }
   .giant.low { color: var(--gules); }
   .giant.paused { color: var(--muted); }
@@ -29,6 +30,9 @@
   @media (max-width: 700px) { .joinbox { grid-template-columns: 1fr; } }
   .qr { background: #fff; padding: 10px; border-radius: 16px; width: 220px; }
   .url { font-size: clamp(1.4rem, 2.6vw, 2.2rem); font-weight: 800; word-break: break-all; }
+  .roomcode { font-weight: 800; }
+  .roomcode b { display: block; font-size: clamp(2.6rem, 5vw, 4.4rem); letter-spacing: .12em; line-height: 1; color: var(--azure); }
+  .corner-join .roomcode b { font-size: 2.4rem; }
   .corner-join { display: flex; align-items: center; gap: 12px; }
   .corner-join .qr { width: 86px; padding: 5px; border-radius: 10px; }
   .teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
@@ -39,6 +43,7 @@
   .side table.list { font-size: 1.05rem; }
   .big-table table.list { font-size: 1.15rem; }
   .big-table table.list tr.sub td { font-size: 1rem; }
+  .sound-btn { position: fixed; right: 16px; bottom: 16px; z-index: 30; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 8px 14px; font: inherit; font-weight: 800; box-shadow: var(--shadow); cursor: pointer; }
 </style>
 </head>
 <body>
@@ -54,15 +59,33 @@
 </div>
 <script src="/static/vendor/qrcode.js"></script>
 <script src="/static/common.js"></script>
+<script src="/static/music.js"></script>
+<button class="sound-btn" id="soundBtn" type="button"></button>
 <script>
 (() => {
   const { $, esc, fmt, skyline, clock, remaining, shield, qr } = CC;
   let S = null, sel = 'live', lastRoundId = null, lastQr = '', qrSvg = '';
   const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  // The room code is private: only a browser where the host is logged in (same admin key as
+  // the admin page) can fetch it, so old players can't read it from the public state.
+  let adminKey = null;
+  try { adminKey = localStorage.getItem('cc.admin'); } catch { adminKey = null; }
+  const room = { version: null, code: null };
+  async function refreshRoom() {
+    if (!adminKey || S.roomVersion === room.version) return;
+    room.version = S.roomVersion;
+    try { room.code = (await CC.api('/api/admin/room', { headers: { 'x-admin-key': adminKey } })).roomCode; }
+    catch (e) { room.code = null; if (e.status === 401) adminKey = null; }
+    render();
+  }
+  const roomBox = () => (room.code
+    ? `<div class="roomcode"><span class="small muted">Room code</span><b class="num">${esc(room.code)}</b></div>`
+    : '<div class="small muted">Log in on the admin page in this browser to show the room code here.</div>');
   const getQr = () => { if (S.joinUrl !== lastQr) { lastQr = S.joinUrl; qrSvg = qr(S.joinUrl); } return qrSvg; };
 
   function render() {
     if (!S) return;
+    refreshRoom();
     document.title = `${S.title} Board`;
     $('#title').textContent = S.title;
     $('#prog').textContent = `${S.playedCount} of ${S.totalRounds} rounds played`;
@@ -73,7 +96,7 @@
     if (sel !== 'live' && sel !== 'overall' && !rounds.find((r) => r.roundId === sel)) sel = 'live';
     $('#tabs').innerHTML = `<button class="tab" data-sel="live" aria-selected="${sel === 'live'}">Live</button><button class="tab" data-sel="overall" aria-selected="${sel === 'overall'}">Overall</button>` +
       rounds.map((r) => `<button class="tab" data-sel="${r.roundId}" aria-selected="${sel === r.roundId}">Round ${r.n}</button>`).join('');
-    $('#joinSide').innerHTML = `<div class="corner-join"><div class="qr">${getQr()}</div><div><div class="small muted">Join on your phone</div><div style="font-weight:800;word-break:break-all">${esc(S.joinUrl)}</div><div class="small muted">Use the code on your table card.</div></div></div>`;
+    $('#joinSide').innerHTML = `<div class="corner-join"><div class="qr">${getQr()}</div><div><div class="small muted">Join on your phone</div><div style="font-weight:800;word-break:break-all">${esc(S.joinUrl)}</div>${roomBox()}<div class="small muted">Plus the code on your table card.</div></div></div>`;
     $('#joinSide').classList.toggle('hidden', S.status === 'lobby' && sel === 'live');
     const openCards = [...document.querySelectorAll('#stage details.tcard[open]')].map((d) => d.dataset.team);
     $('#stage').innerHTML = sel === 'live' ? live() : sel === 'overall' ? overallView() : roundView(rounds.find((r) => r.roundId === sel), false);
@@ -85,15 +108,16 @@
     const st = S.status, r = S.round;
     if (st === 'lobby') {
       return `<div class="eyebrow">Get ready</div><div class="mode">${esc(S.title)}</div>
-        <div class="joinbox"><div class="qr">${getQr()}</div><div class="stack"><div class="eyebrow">Scan or open</div><div class="url">${esc(S.joinUrl)}</div>
-          <p class="blurb">Enter the 4-digit code on your table card and your name. Every round you share ${S.soldiers} soldiers across 10 castles.</p></div></div>
+        <div class="joinbox"><div class="qr">${getQr()}</div><div class="stack"><div class="eyebrow">Scan or open</div><div class="url">${esc(S.joinUrl)}</div>${roomBox()}
+          <p class="blurb">Enter this room code, the 4-digit code on your table card, and your name. Every round you share up to ${S.soldiers} soldiers across 10 castles.</p></div></div>
         <div class="teams-grid">${S.teams.map((t) => `<div class="tile"><div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong><span class="muted small" style="margin-left:auto">${t.players.length}</span></div>
-          <div class="small muted" style="margin-top:4px">${t.players.length ? t.players.map(esc).join(', ') : 'Waiting for players'}</div></div>`).join('')}</div>`;
+          <div class="small muted" style="margin-top:4px">${t.players.length ? t.players.map(esc).join(', ') : 'Waiting for players'}</div></div>`).join('')}</div>
+        <div class="stack" style="margin-top:24px"><h3>How a matchup works</h3>${CC.matchPic(S.basicPicture)}</div>`;
     }
     if (st === 'briefing') {
       return `<div class="spread wrap"><div class="eyebrow">Round ${S.playedCount + 1} of ${S.totalRounds}. Read the rules</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
         <div class="mode">${esc(r.title)}</div>${r.title !== r.modeName ? `<div class="eyebrow">${esc(r.modeName)}</div>` : ''}
-        <p class="blurb">${esc(r.blurb)}</p>${exampleBox(r)}
+        <p class="blurb">${esc(r.blurb)}</p>${CC.matchPic(r.picture)}${exampleBox(r)}
         <div class="eyebrow" style="margin-top:24px">Round starts in</div><div class="giant num" data-timer></div>`;
     }
     if (st === 'active' || st === 'paused') {
@@ -101,7 +125,7 @@
       const totIn = Object.values(subs).reduce((a, x) => a + x.done, 0), tot = Object.values(subs).reduce((a, x) => a + x.total, 0);
       return `<div class="spread wrap"><div class="eyebrow">Round ${S.playedCount + 1} of ${S.totalRounds}</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
         <div class="mode">${esc(r.title)}</div>${r.title !== r.modeName ? `<div class="eyebrow">${esc(r.modeName)}</div>` : ''}
-        <p class="blurb">${esc(r.blurb)}</p>${exampleBox(r)}
+        <p class="blurb">${esc(r.blurb)}</p>${CC.matchPic(r.picture)}${exampleBox(r)}
         <div class="giant num" data-timer></div>
         <div class="stack"><div class="spread"><h3>Armies in</h3><span class="num muted">${totIn} of ${tot}</span></div>
         <div class="teamprog">${S.teams.map((t) => { const s = subs[t.id] || { done: 0, total: 0 }; return `<div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong></div>
@@ -120,6 +144,7 @@
     return `<div class="spread wrap"><div class="eyebrow">Round ${r.n} results${isLatest && !S.finished ? '. Next round coming up' : ''}</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
       <div class="mode">${esc(r.title)}</div>
       <div class="stack"><h3>Each table’s best strategy</h3><p class="small muted">Click a table to see every player’s army and score.</p>${CC.teamCards(r, null, { height: 100 })}</div>
+      <div style="max-width:720px">${CC.strategyBox(r)}</div>
       <div class="stack"><h3>How the room played</h3><p class="small muted">Average soldiers per castle across ${r.participants} armies.${hidden ? ' Gold numbers are the castle values that were revealed.' : ''}</p>
         <div style="max-width:620px">${skyline({ alloc: r.avgAlloc, color: 'var(--room)', values: hidden ? r.values : null, height: 130 })}</div></div>`;
   }
@@ -144,6 +169,21 @@
     });
   }
   $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-sel]'); if (b) { sel = b.dataset.sel; render(); } });
+
+  // Countdown music (on by default; browsers need one click on the page before it can play).
+  let wantMusic = true;
+  try { wantMusic = localStorage.getItem('cc.boardMusic') !== '0'; } catch { /* ignore */ }
+  const soundBtn = $('#soundBtn');
+  const soundLabel = () => { soundBtn.textContent = !wantMusic ? '🔇 Music off' : CountdownMusic.ready() ? '🔊 Music on' : '🔈 Click to turn on music'; };
+  soundBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    wantMusic = !(wantMusic && CountdownMusic.ready());
+    try { localStorage.setItem('cc.boardMusic', wantMusic ? '1' : '0'); } catch { /* ignore */ }
+    CountdownMusic.setOn(wantMusic); soundLabel();
+  });
+  document.addEventListener('pointerdown', (e) => { if (wantMusic && !CountdownMusic.ready() && !e.target.closest('#soundBtn')) { CountdownMusic.setOn(true); soundLabel(); } });
+  soundLabel();
+  setInterval(() => CountdownMusic.update(S, S ? remaining(S) : 0), 50);
   setInterval(tick, 250);
   CC.live('/api/events?role=board', () => CC.api('/api/state'), (s) => { if (s) { S = s; render(); } });
 })();
