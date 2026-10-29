@@ -221,7 +221,7 @@ function roundPublic(r, index) {
   const rules = M.roundRules(r), m = M.modeOf(r.mode);
   return {
     id: r.id, index, number: index + 1, title: displayTitle(r), modeName: m.name, mode: r.mode, style: m.style,
-    blurb: M.blurbFor(r), duration: r.duration, multiplier: r.multiplier, params: M.paramsFor(r),
+    blurb: M.blurbFor(r), example: M.exampleFor(r), duration: r.duration, multiplier: r.multiplier, params: M.paramsFor(r),
     budget: rules.budget, primesOnly: rules.primesOnly, hiddenValues: rules.hiddenValues,
     teamLevel: !!m.teamLevel, usesHistory: !!m.usesHistory,
   };

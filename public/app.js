@@ -134,6 +134,7 @@
           <div id="rulesBody" class="${rulesOpen ? '' : 'hidden'}">
             ${r.title !== r.modeName ? `<p><strong>${esc(r.modeName)}</strong></p>` : ''}
             <p>${esc(r.blurb)}</p>
+            ${r.example ? `<p class="small muted"><strong>Example.</strong> ${esc(r.example)}</p>` : ''}
             ${r.multiplier !== 1 ? `<p><span class="chip gold">This round is worth ×${fmt(r.multiplier)}</span></p>` : ''}
             ${r.usesHistory ? `<p class="small">${g && g.some((x) => x > 0) ? 'Your stationed soldiers are shown on each castle.' : 'You have no soldiers stationed from last round.'}</p>` : ''}
           </div>
@@ -289,6 +290,7 @@
           ${r.multiplier !== 1 ? `<p class="round-line">×${fmt(r.multiplier)} points</p>` : ''}
           <h1>${esc(r.title)}</h1>${r.title !== r.modeName ? `<p class="muted small">${esc(r.modeName)}</p>` : ''}
           <p>${esc(r.blurb)}</p>
+          ${r.example ? `<p class="tile small" style="text-align:left"><strong>Example.</strong> ${esc(r.example)}</p>` : ''}
           <div class="big-score num" data-timer></div><p class="muted">until the round starts. Read the rules, then get your army ready.</p></section>
         ${rulesPrimer()}`;
     } else if (st === 'lobby') {

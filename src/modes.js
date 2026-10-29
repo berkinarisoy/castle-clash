@@ -39,6 +39,7 @@ function shuffle(arr, rnd = Math.random) {
 // Each mode:
 //   name, style (kind of thinking), source ('rules' | 'host' | 'claude')
 //   blurb(p)            -> one-paragraph rule text for players
+//   example(p)          -> a short worked example shown with the rules
 //   params              -> tunable parameters [{key,label,default,min,max,step}]
 //   budget              -> 'exact' (must place all) | 'atMost'
 //   primesOnly          -> forces prime/zero garrisons
@@ -52,6 +53,7 @@ function shuffle(arr, rnd = Math.random) {
 const MODES = {
   classic: {
     name: 'Classic', style: 'The original', source: 'rules',
+    example: () => 'You put 30 soldiers on castle 7 and your opponent puts 20. You win castle 7 and earn 7 points. If you had both put 20 there, nobody would score it.',
     blurb: () => 'The bigger army takes the castle. Castle i is worth i points. Equal armies: nobody scores it.',
     match: (A, B, c) => classic(A.army, B.army, c.values),
   },
@@ -59,6 +61,7 @@ const MODES = {
   blackjack: {
     name: 'Blackjack', style: 'Push your luck', source: 'host',
     params: [{ key: 'cap', label: 'Bust above', default: 21, min: 1, max: 55, step: 1 }],
+    example: (p) => `Win castles 8, 9 and 10 in a matchup and you have 27 points. ${27 > p.cap ? `That is more than ${p.cap}, so you bust: you get 0 for the matchup and your opponent wins it.` : `That is not more than ${p.cap}, so you keep it.`} Winning less can be safer: castles 1, 2 and 3 are only 6 points.`,
     blurb: (p) => `Scored like Classic, but if you score more than ${p.cap} in a matchup you bust and get 0 for that matchup, so your opponent wins it. Your round score is the average over all your matchups.`,
     match: (A, B, c) => {
       let [a, b] = classic(A.army, B.army, c.values);
@@ -70,6 +73,7 @@ const MODES = {
 
   neighbours: {
     name: 'Good Neighbours', style: 'Adjacency', source: 'host',
+    example: () => 'You capture castles 3, 4 and 8. Castles 3 and 4 are next to each other, so they score 3 + 4 = 7 points. Castle 8 is on its own, so it scores nothing.',
     blurb: () => 'A castle only scores if you also capture a castle right next to it (i−1 or i+1). Lone castles are worth nothing.',
     match: (A, B, c) => {
       const [wa, wb] = captures(A.army, B.army);
@@ -84,6 +88,7 @@ const MODES = {
 
   doubling: {
     name: 'Family Ties', style: 'Divisibility', source: 'host',
+    example: () => 'You capture castles 3 and 6. Because you also hold castle 3, castle 6 is worth 6 × 2 = 12. Your total is 3 + 12 = 15 points.',
     blurb: () => 'Castle 2i is worth double if you also capture castle i. So castle 2 doubles with 1, 4 with 2, 6 with 3, 8 with 4 and 10 with 5.',
     match: (A, B, c) => {
       const [wa, wb] = captures(A.army, B.army);
@@ -99,12 +104,14 @@ const MODES = {
 
   primes: {
     name: 'Prime Garrisons', style: 'Number theory', source: 'host', primesOnly: true,
+    example: () => 'With 100 soldiers, 2 + 3 + 5 + 7 + 11 + 13 + 17 + 19 + 23 + 0 = 100 is a valid army, because every castle has a prime number or none. 9 or 10 soldiers on a castle would not be allowed.',
     blurb: () => 'Every castle must get a prime number of soldiers (2, 3, 5, 7, 11…) or none at all. Scored like Classic.',
     match: (A, B, c) => classic(A.army, B.army, c.values),
   },
 
   attrition: {
     name: 'Attrition March', style: 'Algorithms and sequence', source: 'claude',
+    example: () => 'You put 10 soldiers on castle 1 and your opponent puts 4. You win it, your opponent’s 4 are wiped out, and your 6 survivors march on to castle 2 to fight alongside the soldiers you placed there.',
     blurb: () => 'Armies march from castle 1 to 10. At each castle the bigger force wins, and its survivors (the winning margin) march on and join the next fight. The loser’s force there is wiped out.',
     match: (A, B, c) => {
       let ca = 0, cb = 0, a = 0, b = 0;
@@ -120,6 +127,7 @@ const MODES = {
 
   beauty: {
     name: 'Beauty Contest', style: 'Reflexive game theory', source: 'claude', hiddenValues: true,
+    example: () => 'After everyone submits, castle 4 has the most soldiers in the room, so it is worth 1 point. Castle 9 has the fewest, so it is worth 10. A castle nobody else picks can be worth a lot.',
     blurb: () => 'Castle values are set by the whole room after everyone submits. The castle with the most soldiers in total is worth 1, the least defended is worth 10. Guess what everyone else thinks is popular.',
     values: (c, entries) => {
       const totals = new Array(CASTLES).fill(0);
@@ -135,6 +143,7 @@ const MODES = {
 
   shuffled: {
     name: 'Shuffled Banners', style: 'Probability and symmetry', source: 'claude', hiddenValues: true,
+    example: () => 'Castle 1 might turn out to be worth 10 and castle 10 worth just 1. You only find out when time runs out, so spreading your soldiers out is safer than going all in on one castle.',
     blurb: () => 'The values 1–10 are secretly shuffled across the castles and revealed only after time runs out. Every castle is equally likely to be the 10.',
     prepare: () => ({ perm: shuffle(baseValues()) }),
     values: (c) => c.secret.perm.slice(),
@@ -144,6 +153,7 @@ const MODES = {
   warchest: {
     name: 'War Chest', style: 'Economics and opportunity cost', source: 'claude', budget: 'atMost',
     params: [{ key: 'rate', label: 'Points per unused soldier, per matchup', default: 0.25, min: 0, max: 5, step: 0.05 }],
+    example: (p) => `Keep 20 soldiers at home and you earn 20 × ${r2(p.rate)} = ${r2(20 * p.rate)} points in every matchup, on top of any castles you win.`,
     blurb: (p) => `You may send fewer than all your soldiers. Every soldier kept home earns ${p.rate} points in each matchup. Is your last soldier worth more on the field?`,
     match: (A, B, c) => {
       const [a, b] = classic(A.army, B.army, c.values);
@@ -154,6 +164,7 @@ const MODES = {
   garrison: {
     name: 'Lingering Garrison', style: 'Dynamics and memory', source: 'claude', usesHistory: true,
     params: [{ key: 'keep', label: 'Share of last round’s soldiers that stay', default: 0.5, min: 0, max: 1, step: 0.05 }],
+    example: (p) => `Last round you put 20 soldiers on castle 5. ${Math.round(p.keep * 100)}% stay, so ${Math.floor(20 * p.keep)} of them are still on castle 5 this round, added to whatever you place there now.`,
     blurb: (p) => `${Math.round(p.keep * 100)}% of the soldiers you placed on each castle last round (rounded down) are still there and fight for you, on top of this round’s army.`,
     army: (alloc, c, e) => {
       const prev = c.prev[e.playerId];
@@ -164,6 +175,7 @@ const MODES = {
 
   alliance: {
     name: 'Grand Alliance', style: 'Cooperation', source: 'claude', teamLevel: true,
+    example: () => 'Three players at your table put 30, 60 and 0 soldiers on castle 5. Your table’s army on castle 5 is the average, 30, and that is what fights the other tables.',
     blurb: () => 'Your table fights as one. Each castle gets the average of your teammates’ soldiers, and your team army battles every other team’s. Your score is the average over every opposing player, so bigger teams count for more. Plan together.',
     match: (A, B, c) => classic(A.army, B.army, c.values),
   },
@@ -171,6 +183,7 @@ const MODES = {
   decisive: {
     name: 'Decisive Victory', style: 'Ratios and thresholds', source: 'claude',
     params: [{ key: 'ratio', label: 'Need more than ×', default: 2, min: 1, max: 10, step: 0.5 }],
+    example: (p) => { const t = 10 * p.ratio; return `Your opponent puts 10 soldiers on a castle. You need more than ${t}: ${Math.floor(t) + 1} soldiers win it, but ${Math.floor(t)} or fewer is a stalemate and nobody scores.`; },
     blurb: (p) => `You only capture a castle with more than ${p.ratio} times your opponent’s soldiers there. Anything less is a stalemate and nobody scores it.`,
     match: (A, B, c) => {
       let a = 0, b = 0;
@@ -186,6 +199,7 @@ const MODES = {
 
   winnerall: {
     name: 'Winner Takes All', style: 'Aggregation and risk', source: 'claude',
+    example: () => 'You score 30 points in a matchup and your opponent scores 25. You take all 55 points and they get 0. Winning 28–27 pays exactly the same as winning 50–5.',
     blurb: () => 'Each matchup is scored like Classic, but whoever finishes ahead takes all 55 points. The loser gets nothing, and a tied matchup pays nobody. Winning margins don’t matter.',
     match: (A, B, c) => {
       const [a, b] = classic(A.army, B.army, c.values);
@@ -211,6 +225,10 @@ function roundRules(round) {
     primesOnly: !!(m.primesOnly || round.primesOnly),
     hiddenValues: !!m.hiddenValues,
   };
+}
+function exampleFor(round) {
+  const m = modeOf(round.mode);
+  return m.example ? m.example(paramsFor(round)) : '';
 }
 function blurbFor(round) {
   const m = modeOf(round.mode);
@@ -339,7 +357,8 @@ function catalog() {
     params: m.params || [], budget: m.budget || 'exact', primesOnly: !!m.primesOnly,
     hiddenValues: !!m.hiddenValues, usesHistory: !!m.usesHistory, teamLevel: !!m.teamLevel,
     blurb: m.blurb(Object.fromEntries((m.params || []).map((d) => [d.key, d.default]))),
+    example: m.example ? m.example(Object.fromEntries((m.params || []).map((d) => [d.key, d.default]))) : '',
   }));
 }
 
-module.exports = { MODES, CASTLES, modeOf, paramsFor, roundRules, blurbFor, validate, randomAlloc, scoreRound, catalog, isPrime, classic };
+module.exports = { MODES, CASTLES, modeOf, paramsFor, roundRules, blurbFor, exampleFor, validate, randomAlloc, scoreRound, catalog, isPrime, classic };

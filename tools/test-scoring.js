@@ -112,4 +112,5 @@ ok('decisive needs more than double', () => {
 });
 ok('winner takes all', () => { const r = run('winnerall', pair(A, B)); assert.strictEqual(r.players.b.score, 55); assert.strictEqual(r.players.a.score, 0); });
 ok('catalog has 13 modes with blurbs', () => { const c = M.catalog(); assert.strictEqual(c.length, 13); c.forEach((m) => assert.ok(m.blurb.length > 20)); });
+ok('every mode has a worked example', () => { for (const m of M.catalog()) assert.ok(m.example.length > 40, m.id); });
 console.log(`\n${n} scoring tests passed.`);

@@ -17,6 +17,8 @@
   .eyebrow { color: var(--muted); font-weight: 700; font-size: 1rem; }
   .mode { font-size: clamp(2.2rem, 4.5vw, 4rem); font-weight: 850; letter-spacing: -.03em; }
   .blurb { font-size: clamp(1.05rem, 1.6vw, 1.4rem); max-width: 46em; color: var(--ink); }
+  .example { max-width: 46em; margin-top: 14px; padding: 14px 18px; border-left: 5px solid var(--or); background: var(--paper); border-radius: 10px; font-size: clamp(1rem, 1.4vw, 1.25rem); }
+  .example b { display: block; font-size: .8em; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
   .giant { font-size: clamp(5rem, 15vw, 13rem); font-weight: 850; line-height: .9; letter-spacing: -.05em; }
   .giant.low { color: var(--gules); }
   .giant.paused { color: var(--muted); }
@@ -78,6 +80,7 @@
     openCards.forEach((id) => { const d = document.querySelector(`#stage details.tcard[data-team="${id}"]`); if (d) d.open = true; });
     tick();
   }
+  const exampleBox = (r) => r.example ? `<div class="example"><b>Example</b>${esc(r.example)}</div>` : '';
   function live() {
     const st = S.status, r = S.round;
     if (st === 'lobby') {
@@ -90,7 +93,7 @@
     if (st === 'briefing') {
       return `<div class="spread wrap"><div class="eyebrow">Round ${S.playedCount + 1} of ${S.totalRounds}. Read the rules</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
         <div class="mode">${esc(r.title)}</div>${r.title !== r.modeName ? `<div class="eyebrow">${esc(r.modeName)}</div>` : ''}
-        <p class="blurb">${esc(r.blurb)}</p>
+        <p class="blurb">${esc(r.blurb)}</p>${exampleBox(r)}
         <div class="eyebrow" style="margin-top:24px">Round starts in</div><div class="giant num" data-timer></div>`;
     }
     if (st === 'active' || st === 'paused') {
@@ -98,7 +101,7 @@
       const totIn = Object.values(subs).reduce((a, x) => a + x.done, 0), tot = Object.values(subs).reduce((a, x) => a + x.total, 0);
       return `<div class="spread wrap"><div class="eyebrow">Round ${S.playedCount + 1} of ${S.totalRounds}</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
         <div class="mode">${esc(r.title)}</div>${r.title !== r.modeName ? `<div class="eyebrow">${esc(r.modeName)}</div>` : ''}
-        <p class="blurb">${esc(r.blurb)}</p>
+        <p class="blurb">${esc(r.blurb)}</p>${exampleBox(r)}
         <div class="giant num" data-timer></div>
         <div class="stack"><div class="spread"><h3>Armies in</h3><span class="num muted">${totIn} of ${tot}</span></div>
         <div class="teamprog">${S.teams.map((t) => { const s = subs[t.id] || { done: 0, total: 0 }; return `<div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong></div>
