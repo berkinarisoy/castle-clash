@@ -47,7 +47,7 @@
 
   function topbar() {
     const open = S.status === 'active' || S.status === 'paused';
-    const roundLine = open || S.status === 'closed'
+    const roundLine = open || S.status === 'closed' || S.status === 'briefing'
       ? `Round ${S.playedCount + (S.status === 'closed' ? 0 : 1)} of ${S.totalRounds}`
       : S.playedCount ? `${S.playedCount} of ${S.totalRounds} rounds played` : 'Waiting to start';
     return `<header class="topbar"><div class="spread">
@@ -283,7 +283,15 @@
   function renderOther() {
     const st = S.status;
     let body = '';
-    if (st === 'lobby') {
+    if (st === 'briefing') {
+      const r = S.round;
+      body = `<section class="panel stack" style="text-align:center">
+          ${r.multiplier !== 1 ? `<p class="round-line">×${fmt(r.multiplier)} points</p>` : ''}
+          <h1>${esc(r.title)}</h1>${r.title !== r.modeName ? `<p class="muted small">${esc(r.modeName)}</p>` : ''}
+          <p>${esc(r.blurb)}</p>
+          <div class="big-score num" data-timer></div><p class="muted">until the round starts. Read the rules, then get your army ready.</p></section>
+        ${rulesPrimer()}`;
+    } else if (st === 'lobby') {
       body = `<section class="panel stack" style="text-align:center">${castleIcon(S.me.color)}
         <h1>You’re in, ${esc(S.me.name)}</h1>
         <p class="muted">You’re playing for <strong style="color:var(--ink)">${esc(S.me.teamName)}</strong>. The first round starts when the host is ready.</p></section>
@@ -320,13 +328,13 @@
     let html = `<section class="panel stack" style="text-align:center">
       <p class="round-line">${esc(last.title)} results</p>`;
     if (mine && mine.me) {
-      html += `<div class="big-score num">${fmt(mine.me.score)}</div><p class="muted">your points this round</p>
+      html += `<div class="big-score num">${fmt(mine.me.score)}</div><p class="muted">your average score this round</p>
         <div class="row-flex" style="margin-top:12px">
           <div class="stat"><b class="num">${mine.me.won}</b><span class="tiny muted">won</span></div>
           <div class="stat"><b class="num">${mine.me.lost}</b><span class="tiny muted">lost</span></div>
           <div class="stat"><b class="num">${mine.me.drawn}</b><span class="tiny muted">drawn</span></div>
         </div>
-        <p class="tiny muted">${last.mode === 'alliance' ? 'Your table fought as one army.' : `Out of ${mine.me.opponents} opponents.`}</p>`;
+        <p class="tiny muted">${last.mode === 'alliance' ? 'Your table fought as one army.' : `Average over ${mine.me.opponents} opponents.`}</p>`;
     } else {
       html += '<h2>You sat this one out</h2><p class="muted small">Submit an army next round to score.</p>';
     }

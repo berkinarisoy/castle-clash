@@ -87,6 +87,12 @@
         <div class="teams-grid">${S.teams.map((t) => `<div class="tile"><div class="row-flex">${shield(t.color)}<strong>${esc(t.name)}</strong><span class="muted small" style="margin-left:auto">${t.players.length}</span></div>
           <div class="small muted" style="margin-top:4px">${t.players.length ? t.players.map(esc).join(', ') : 'Waiting for players'}</div></div>`).join('')}</div>`;
     }
+    if (st === 'briefing') {
+      return `<div class="spread wrap"><div class="eyebrow">Round ${S.playedCount + 1} of ${S.totalRounds}. Read the rules</div>${r.multiplier !== 1 ? `<span class="chip gold">×${fmt(r.multiplier)} points</span>` : ''}</div>
+        <div class="mode">${esc(r.title)}</div>${r.title !== r.modeName ? `<div class="eyebrow">${esc(r.modeName)}</div>` : ''}
+        <p class="blurb">${esc(r.blurb)}</p>
+        <div class="eyebrow" style="margin-top:24px">Round starts in</div><div class="giant num" data-timer></div>`;
+    }
     if (st === 'active' || st === 'paused') {
       const subs = S.submissions;
       const totIn = Object.values(subs).reduce((a, x) => a + x.done, 0), tot = Object.values(subs).reduce((a, x) => a + x.total, 0);

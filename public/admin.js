@@ -75,11 +75,12 @@
   document.addEventListener('focusout', () => setTimeout(() => { if (pending && !editing()) { pending = false; renderMain(); } }, 0));
 
   // ---------- header ----------
-  const statusLabel = { lobby: 'Lobby', active: 'Round running', paused: 'Paused', closed: 'Scored, not revealed', revealed: 'Results showing' };
+  const statusLabel = { lobby: 'Lobby', briefing: 'Rules showing', active: 'Round running', paused: 'Paused', closed: 'Scored, not revealed', revealed: 'Results showing' };
   function renderHead() {
     const st = S.status, r = S.round, next = S.nextUnplayed >= 0 ? S.rounds[S.nextUnplayed] : null;
     let ctl = '';
-    if (st === 'active') ctl = '<button class="btn soft small" data-act="game/pause">Pause</button><button class="btn soft small" data-act="game/extend">+30 s</button><button class="btn danger small" data-act="game/end" data-confirm="End the round now and score it?">End now</button>';
+    if (st === 'briefing') ctl = '<button class="btn" data-act="game/begin">Start now</button><button class="btn soft small" data-act="game/extend">+30 s</button><button class="btn danger small" data-act="game/cancel" data-confirm="Cancel this round? It goes back to unplayed.">Cancel</button>';
+    else if (st === 'active') ctl = '<button class="btn soft small" data-act="game/pause">Pause</button><button class="btn soft small" data-act="game/extend">+30 s</button><button class="btn danger small" data-act="game/end" data-confirm="End the round now and score it?">End now</button>';
     else if (st === 'paused') ctl = '<button class="btn small" data-act="game/resume">Resume</button><button class="btn soft small" data-act="game/extend">+30 s</button><button class="btn danger small" data-act="game/end" data-confirm="End the round now and score it?">End now</button>';
     else if (st === 'closed') ctl = '<button class="btn gold" data-act="game/reveal">Reveal results</button>';
     else if (next) ctl = `<button class="btn" data-act="game/start">Start round ${S.playedCount + 1}: ${esc(next.displayTitle)}</button>`;
@@ -88,8 +89,8 @@
       <div class="brand"><img src="/static/logo.svg" alt="">${esc(S.title)}</div>
       <div class="status">
         <span class="chip ${st === 'active' ? 'ok' : st === 'closed' ? 'gold' : ''}">${statusLabel[st] || st}</span>
-        ${r && (st === 'active' || st === 'paused' || st === 'closed') ? `<span class="small"><strong>${esc(r.title)}</strong></span>` : ''}
-        ${st === 'active' || st === 'paused' ? '<span class="timer-s num" data-timer></span>' : ''}
+        ${r && (st === 'briefing' || st === 'active' || st === 'paused' || st === 'closed') ? `<span class="small"><strong>${esc(r.title)}</strong></span>` : ''}
+        ${st === 'briefing' ? '<span class="small muted">Starts in</span>' : ''}${st === 'active' || st === 'paused' || st === 'briefing' ? '<span class="timer-s num" data-timer></span>' : ''}
         ${ctl}
         <a class="btn ghost small" href="/board" target="_blank" rel="noopener">Open board</a>
       </div></div>
@@ -126,7 +127,11 @@
   function gameView() {
     const st = S.status, r = S.round, open = st === 'active' || st === 'paused';
     let now = '';
-    if (open) {
+    if (st === 'briefing') {
+      now = `<section class="panel stack"><div class="spread"><h2>${esc(r.title)}</h2><span class="chip">${esc(r.modeName)}</span></div>
+        <p class="small">${esc(r.blurb)}</p>
+        <p class="small muted">Players are reading the rules. The round starts by itself when the countdown ends, or press Start now.</p></section>`;
+    } else if (open) {
       const sub = new Set(S.submittedIds);
       now = `<section class="panel stack"><div class="spread"><h2>${esc(r.title)}</h2><span class="chip">${esc(r.modeName)}</span></div>
         <p class="small">${esc(r.blurb)}</p>
@@ -146,7 +151,7 @@
     const plan = `<section class="panel"><div class="spread" style="margin-bottom:6px"><h2>Round plan</h2><button class="linkbtn" data-sect="rounds">Edit rounds</button></div>
       ${S.rounds.map((x, i) => `<div class="plan-row"><div class="plan-n">${i + 1}</div>
         <div class="grow"><strong>${esc(x.displayTitle)}</strong><div class="small muted">${esc(modeName(x.mode))}, ${clock(x.duration * 1000)}${x.multiplier !== 1 ? `, ×${fmt(x.multiplier)}` : ''}${x.primesOnly ? ', primes only' : ''}</div></div>
-        <div class="row-flex">${x.current && open ? '<span class="chip ok">Running</span>'
+        <div class="row-flex">${x.current && (open || st === 'briefing') ? '<span class="chip ok">Running</span>'
           : x.played ? `<span class="chip">Played${x.playOrder ? ` as round ${x.playOrder}` : ''}</span><button class="linkbtn small" data-act="game/discard" data-body='${JSON.stringify({ roundId: x.id })}' data-confirm="Discard this round's results? Its scores are removed from the leaderboard and it can be played again.">Discard</button>`
           : `<button class="btn soft small" data-act="game/start" data-body='${JSON.stringify({ index: i })}' ${open || st === 'closed' ? 'disabled' : ''}>Start</button>`}</div></div>`).join('')}</section>`;
     const side = `<section class="panel"><h2 style="margin-bottom:6px">Overall</h2>${CC.overallTable(S.board, null, { members: true })}${S.board.rounds.some((r2) => !r2.revealed) ? '<p class="tiny muted" style="margin-top:6px">Includes scores not yet revealed to players.</p>' : ''}</section>
@@ -203,7 +208,7 @@
       <section class="panel stack"><h2>Rounds</h2><p class="small muted">Rounds are played top to bottom with “Start next round”, or start any of them from the Game tab. Played rounds are locked.</p></section>
       <div class="stack" id="roundsEd">${rd.map((r, i) => {
         const m = S.modes.find((x) => x.id === r.mode) || S.modes[0];
-        const locked = r.played || (r.current && (S.status === 'active' || S.status === 'paused'));
+        const locked = r.played || (r.current && (S.status === 'active' || S.status === 'paused' || S.status === 'briefing'));
         return `<section class="panel round-ed" data-i="${i}"><div class="plan-n" style="font-size:1.3rem">${i + 1}</div>
           <fieldset class="stack" style="border:0;padding:0;margin:0;min-width:0" ${locked ? 'disabled' : ''}>
             <div class="spread wrap"><strong>${esc(r.title || m.name)}</strong>
@@ -243,7 +248,8 @@
       <section class="panel stack"><h2>Game settings</h2>
         <form class="stack" id="settingsForm">
           <label class="field"><span>Game title</span><input type="text" name="title" value="${esc(s.title)}" maxlength="40"></label>
-          <label class="field"><span>Soldiers per player each round</span><input type="number" name="soldiers" value="${s.soldiers}" min="10" max="1000" ${S.status === 'active' || S.status === 'paused' ? 'disabled' : ''}></label>
+          <label class="field"><span>Soldiers per player each round</span><input type="number" name="soldiers" value="${s.soldiers}" min="10" max="1000" ${S.status === 'active' || S.status === 'paused' || S.status === 'briefing' ? 'disabled' : ''}></label>
+          <label class="field"><span>Rules countdown before each round (seconds, 0 = start at once)</span><input type="number" name="briefingSeconds" value="${s.briefingSeconds ?? 30}" min="0" max="300"></label>
           <label class="field"><span>Players who don’t submit</span><select name="nonSubmit">
             <option value="exclude" ${s.nonSubmit === 'exclude' ? 'selected' : ''}>Sit the round out (recommended)</option>
             <option value="zero" ${s.nonSubmit === 'zero' ? 'selected' : ''}>Play with an empty army (gives everyone free points)</option></select></label>
@@ -283,6 +289,7 @@
       const f = new FormData(e.target);
       const s = { title: f.get('title'), nonSubmit: f.get('nonSubmit'), publicUrl: f.get('publicUrl'), autoReveal: f.has('autoReveal'), allowJoin: f.has('allowJoin'), showTeammates: f.has('showTeammates') };
       if (f.get('soldiers') !== null) s.soldiers = Number(f.get('soldiers'));
+      if (f.get('briefingSeconds') !== null) s.briefingSeconds = Number(f.get('briefingSeconds'));
       if (await act('settings/set', { settings: s }, 'Settings saved')) { settingsDraft = null; }
     }
     if (e.target.id === 'savePreset') {

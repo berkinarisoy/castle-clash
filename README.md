@@ -111,6 +111,7 @@ To start completely fresh, stop the server and delete `data/state.json`.
 - Players who don't submit sit the round out: they score nothing and nobody plays against them. You can change this in Settings.
 - Players can change their army until the timer ends.
 - A player who reconnects with the same table code and name gets their own seat back, for example after switching phones.
+- Your score for a round is the average of your scores against every opponent, and that average is the number shown on screen.
 - Team score for a round = the best individual score at that table, times the round's multiplier. Tied teams share a placing.
 
 ## Round modes
@@ -118,7 +119,7 @@ To start completely fresh, stop the server and delete `data/state.json`.
 | Mode | Idea |
 |---|---|
 | Classic | The rules as written. |
-| Blackjack | Score above 21 in a matchup and you get 0 for it. |
+| Blackjack | Score above 21 in a matchup and you get 0 for that matchup. |
 | Good Neighbours | A castle only scores if you also capture an adjacent castle. |
 | Family Ties | Castle 2i is worth double if you also capture castle i. |
 | Prime Garrisons | Every castle gets a prime number of soldiers, or none. |
@@ -130,16 +131,14 @@ To start completely fresh, stop the server and delete `data/state.json`.
 | Grand Alliance | Each table's armies are averaged into one team army. |
 | Decisive Victory | You need more than twice your opponent's soldiers to capture. |
 | Winner Takes All | Whoever wins a matchup takes all 55 points. |
-| Mirror Match | Armies within 10° of each other (as vectors in ℝ¹⁰) void the matchup. |
-| Proportional Spoils | Castles are split in proportion to soldiers. |
 
-Any mode can also get the "primes only" twist. The numbers in the table (21, 0.25, half, ×2, 10°) can be changed per round.
+Any mode can also get the "primes only" twist. The numbers in the table (21, 0.25, half, ×2) can be changed per round.
 
 ## Checks
 
 ```
 node tools/test-scoring.js   # scoring for every mode, including the example in rules.md
-node tools/test-e2e.js       # plays all 15 modes against a live server
+node tools/test-e2e.js       # plays all 13 modes against a live server
 ```
 
 ## Files

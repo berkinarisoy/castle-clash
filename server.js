@@ -56,7 +56,7 @@ function normRound(r = {}, keepId = true) {
 function defaultSettings() {
   return {
     title: 'Castle Clash', soldiers: 100, autoReveal: true, nonSubmit: 'exclude',
-    allowJoin: true, showTeammates: true, publicUrl: '',
+    allowJoin: true, showTeammates: true, publicUrl: '', briefingSeconds: 30,
   };
 }
 function freshState() {
@@ -93,6 +93,9 @@ const player = (id) => S.players.find((p) => p.id === id);
 const byToken = (tok) => tok && S.players.find((p) => p.token === tok);
 const curRound = () => S.rounds.find((r) => r.id === S.current.roundId) || null;
 const isOpen = () => S.current.status === 'active' || S.current.status === 'paused';
+// A round is "in progress" from the moment it is announced (rules showing) until it is scored.
+const isBriefing = () => S.current.status === 'briefing';
+const inRound = () => isOpen() || isBriefing();
 function newCode() {
   const used = new Set(S.teams.map((t) => t.code));
   for (;;) { const c = String(crypto.randomInt(1000, 10000)); if (!used.has(c)) return c; }
@@ -125,6 +128,7 @@ function joinUrl() {
 function remainingMs() {
   if (S.current.status === 'active') return Math.max(0, S.current.endsAt - now());
   if (S.current.status === 'paused') return S.current.remainingMs;
+  if (S.current.status === 'briefing') return Math.max(0, S.current.briefingEndsAt - now());
   return 0;
 }
 function displayTitle(r, i) {
@@ -136,13 +140,17 @@ function displayTitle(r, i) {
 let roundTimer = null;
 function schedule() {
   clearTimeout(roundTimer);
+  const wait = (t) => Math.max(0, Math.min(t - now(), 2 ** 31 - 1));
   if (S.current.status === 'active') {
-    roundTimer = setTimeout(() => { if (S.current.status === 'active' && now() >= S.current.endsAt - 5) closeRound(); else schedule(); },
-      Math.max(0, Math.min(S.current.endsAt - now(), 2 ** 31 - 1)));
+    roundTimer = setTimeout(() => { if (S.current.status === 'active' && now() >= S.current.endsAt - 5) closeRound(); else schedule(); }, wait(S.current.endsAt));
+  } else if (S.current.status === 'briefing') {
+    roundTimer = setTimeout(() => { if (S.current.status === 'briefing' && now() >= S.current.briefingEndsAt - 5) beginRound(); else schedule(); }, wait(S.current.briefingEndsAt));
   }
 }
-function startRound(index) {
-  if (isOpen()) throw new Error('A round is already running.');
+// Announces a round: players see its rules for `briefingSeconds`, then it starts by itself
+// (or sooner when the host presses Start now). Pass {briefing: false} to start straight away.
+function startRound(index, { briefing = true } = {}) {
+  if (inRound()) throw new Error('A round is already running.');
   if (S.current.status === 'closed') reveal();
   const r = S.rounds[index];
   if (!r) throw new Error('No such round.');
@@ -150,7 +158,15 @@ function startRound(index) {
   const mode = M.modeOf(r.mode);
   S.submissions[r.id] = {};
   S.secrets[r.id] = mode.prepare ? mode.prepare() : {};
-  S.current = { index, roundId: r.id, status: 'active', startedAt: now(), endsAt: now() + r.duration * 1000, remainingMs: null };
+  const secs = Math.max(0, Number(S.settings.briefingSeconds) || 0);
+  S.current = { index, roundId: r.id, status: 'briefing', startedAt: null, endsAt: null, briefingEndsAt: now() + secs * 1000, remainingMs: null };
+  if (!briefing || secs === 0) return beginRound();
+  schedule(); changed();
+}
+function beginRound() {
+  const r = curRound();
+  if (!r || !isBriefing()) throw new Error('No round is waiting to start.');
+  S.current = { index: S.current.index, roundId: r.id, status: 'active', startedAt: now(), endsAt: now() + r.duration * 1000, briefingEndsAt: null, remainingMs: null };
   // test bots submit right away
   for (const p of S.players) if (p.bot) S.submissions[r.id][p.id] = { alloc: M.randomAlloc(r, S.settings.soldiers), at: now() };
   schedule(); changed();
@@ -278,6 +294,7 @@ function publicView() {
   return {
     now: now(), title: S.settings.title, soldiers: S.settings.soldiers, joinUrl: joinUrl(),
     status: S.current.status, remainingMs: remainingMs(), endsAt: S.current.status === 'active' ? S.current.endsAt : null,
+    briefingEndsAt: S.current.status === 'briefing' ? S.current.briefingEndsAt : null,
     round: roundPublic(r, S.current.index), playedCount: S.history.length, totalRounds: S.rounds.length,
     finished: nu === -1 && S.current.status === 'revealed', fresh: isFresh(),
     teams: S.teams.map((t) => ({ id: t.id, name: t.name, color: t.color, players: S.players.filter((p) => p.teamId === t.id).map((p) => p.name) })),
@@ -297,7 +314,7 @@ function playerView(p) {
     name: q.name, submitted: !!subs[q.id], alloc: S.settings.showTeammates && subs[q.id] ? subs[q.id].alloc : null,
   }));
   v.garrison = null;
-  if (r && isOpen() && M.modeOf(r.mode).usesHistory) {
+  if (r && inRound() && M.modeOf(r.mode).usesHistory) {
     const prev = prevAllocsFor(r.id)[p.id];
     const keep = M.paramsFor(r).keep;
     v.garrison = prev ? prev.map((x) => Math.floor(x * keep)) : new Array(M.CASTLES).fill(0);
@@ -419,7 +436,7 @@ function buildPreset(name, includeTeams) {
 }
 function applyPreset(p, includeTeams) {
   if (!p || !Array.isArray(p.rounds)) throw new Error('That file is not a Castle Clash config.');
-  if (isOpen()) throw new Error('Finish or cancel the running round first.');
+  if (inRound()) throw new Error('Finish or cancel the running round first.');
   const keepPlayed = S.rounds.filter((r) => S.results[r.id]);
   S.rounds = [...keepPlayed, ...p.rounds.map((r) => normRound(r, false))];
   if (p.settings) S.settings = { ...defaultSettings(), ...p.settings, publicUrl: S.settings.publicUrl || p.settings.publicUrl || '' };
@@ -468,12 +485,12 @@ const actions = {
     const incoming = b.rounds.map((r) => normRound(r, true));
     const ids = new Set(incoming.map((r) => r.id));
     for (const r of S.rounds) {
-      if ((S.results[r.id] || S.current.roundId === r.id && isOpen()) && !ids.has(r.id)) throw new Error('Played or running rounds can’t be removed. Discard their results first.');
+      if ((S.results[r.id] || S.current.roundId === r.id && inRound()) && !ids.has(r.id)) throw new Error('Played or running rounds can’t be removed. Discard their results first.');
     }
     // played/running rounds keep their original settings
     S.rounds = incoming.map((r) => {
       const old = S.rounds.find((x) => x.id === r.id);
-      return old && (S.results[r.id] || (S.current.roundId === r.id && isOpen())) ? old : r;
+      return old && (S.results[r.id] || (S.current.roundId === r.id && inRound())) ? old : r;
     });
     if (S.current.roundId) S.current.index = S.rounds.findIndex((r) => r.id === S.current.roundId);
   },
@@ -481,9 +498,10 @@ const actions = {
     const s = b.settings || {};
     const cur = S.settings;
     if (s.title !== undefined) cur.title = String(s.title).slice(0, 40) || 'Castle Clash';
-    if (s.soldiers !== undefined && !isOpen()) cur.soldiers = Math.max(10, Math.min(1000, Math.round(Number(s.soldiers)) || 100));
+    if (s.soldiers !== undefined && !inRound()) cur.soldiers = Math.max(10, Math.min(1000, Math.round(Number(s.soldiers)) || 100));
     for (const k of ['autoReveal', 'allowJoin', 'showTeammates']) if (s[k] !== undefined) cur[k] = !!s[k];
     if (s.nonSubmit !== undefined) cur.nonSubmit = s.nonSubmit === 'zero' ? 'zero' : 'exclude';
+    if (s.briefingSeconds !== undefined) cur.briefingSeconds = Math.max(0, Math.min(300, Math.round(Number(s.briefingSeconds)) || 0));
     if (s.publicUrl !== undefined) cur.publicUrl = String(s.publicUrl).trim().slice(0, 200);
   },
   'game/start': (b) => { const i = b.index === undefined || b.index === null ? nextUnplayed() : Number(b.index); if (i < 0) throw new Error('Every round has been played.'); startRound(i); },
@@ -491,15 +509,17 @@ const actions = {
   'game/resume': () => { if (S.current.status !== 'paused') throw new Error('Not paused.'); S.current.endsAt = now() + S.current.remainingMs; S.current.status = 'active'; S.current.remainingMs = null; schedule(); },
   'game/extend': (b) => {
     const ms = (Number(b.seconds) || 30) * 1000;
-    if (S.current.status === 'active') { S.current.endsAt = Math.max(now() + 1000, S.current.endsAt + ms); schedule(); }
+    if (S.current.status === 'briefing') { S.current.briefingEndsAt = Math.max(now() + 1000, S.current.briefingEndsAt + ms); schedule(); }
+    else if (S.current.status === 'active') { S.current.endsAt = Math.max(now() + 1000, S.current.endsAt + ms); schedule(); }
     else if (S.current.status === 'paused') S.current.remainingMs = Math.max(1000, S.current.remainingMs + ms);
     else throw new Error('No running round.');
   },
   'game/end': () => { if (!isOpen()) throw new Error('No running round.'); closeRound(); },
   'game/reveal': () => { if (S.current.status !== 'closed') throw new Error('Nothing waiting to be revealed.'); reveal(); },
-  'game/restart': () => { const r = curRound(); if (!r || !isOpen()) throw new Error('No running round.'); S.current.status = 'lobby'; startRound(S.current.index); },
+  'game/begin': () => { if (!isBriefing()) throw new Error('No round is waiting to start.'); beginRound(); },
+  'game/restart': () => { const r = curRound(); if (!r || !isOpen()) throw new Error('No running round.'); S.current.status = 'lobby'; startRound(S.current.index, { briefing: false }); },
   'game/cancel': () => {
-    const r = curRound(); if (!r || !isOpen()) throw new Error('No running round.');
+    const r = curRound(); if (!r || !inRound()) throw new Error('No running round.');
     clearTimeout(roundTimer);
     delete S.submissions[r.id]; delete S.secrets[r.id];
     const last = S.history[S.history.length - 1];
@@ -507,7 +527,7 @@ const actions = {
   },
   'game/discard': (b) => {
     const id = b.roundId; if (!S.results[id]) throw new Error('That round has no results.');
-    if (isOpen()) throw new Error('Finish or cancel the running round first.');
+    if (inRound()) throw new Error('Finish or cancel the running round first.');
     delete S.results[id]; delete S.submissions[id]; delete S.secrets[id];
     S.history = S.history.filter((x) => x !== id);
     const last = S.history[S.history.length - 1];
@@ -551,7 +571,10 @@ function makeBackup() {
   }).filter(Boolean);
   return { app: 'castle-clash-backup', version: 1, savedAt: now(), state: S, presets };
 }
-function recoverTimer() { if (S.current.status === 'active') { if (now() >= S.current.endsAt) closeRound(); else schedule(); } }
+function recoverTimer() {
+  if (S.current.status === 'active') { if (now() >= S.current.endsAt) closeRound(); else schedule(); }
+  else if (S.current.status === 'briefing') { if (now() >= S.current.briefingEndsAt) beginRound(); else schedule(); }
+}
 function restoreBackup(b) {
   if (!b || b.app !== 'castle-clash-backup' || !b.state || !Array.isArray(b.state.teams)) throw new Error('That isn’t a Castle Clash backup.');
   clearTimeout(roundTimer);
@@ -634,6 +657,7 @@ const server = http.createServer(async (req, res) => {
       if (!pl) return send(res, 401, { error: 'You’re not in the game any more. Join again.' });
       const r = curRound();
       const late = S.current.status === 'active' && now() > S.current.endsAt + 1500;
+      if (r && isBriefing()) return send(res, 409, { error: 'The round hasn’t started yet. Read the rules first.' });
       if (!r || !isOpen() || late) return send(res, 409, { error: 'This round is closed.' });
       const b = await readBody(req);
       const alloc = Array.isArray(b.alloc) ? b.alloc.map(Number) : null;

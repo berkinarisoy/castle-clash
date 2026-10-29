@@ -10,6 +10,7 @@ const CC = (() => {
   function remaining(state) {
     if (!state) return 0;
     if (state.status === 'active' && state.endsAt) return Math.max(0, state.endsAt - (Date.now() + offset));
+    if (state.status === 'briefing' && state.briefingEndsAt) return Math.max(0, state.briefingEndsAt - (Date.now() + offset));
     if (state.status === 'paused') return state.remainingMs || 0;
     return 0;
   }

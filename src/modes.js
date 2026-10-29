@@ -59,7 +59,7 @@ const MODES = {
   blackjack: {
     name: 'Blackjack', style: 'Push your luck', source: 'host',
     params: [{ key: 'cap', label: 'Bust above', default: 21, min: 1, max: 55, step: 1 }],
-    blurb: (p) => `Scored like Classic, but if you score more than ${p.cap} in a matchup you bust and get 0 for it.`,
+    blurb: (p) => `Scored like Classic, but if you score more than ${p.cap} in a matchup you bust and get 0 for that matchup, so your opponent wins it. Your round score is the average over all your matchups.`,
     match: (A, B, c) => {
       let [a, b] = classic(A.army, B.army, c.values);
       if (a > c.params.cap) a = 0;
@@ -164,7 +164,7 @@ const MODES = {
 
   alliance: {
     name: 'Grand Alliance', style: 'Cooperation', source: 'claude', teamLevel: true,
-    blurb: () => 'Your table fights as one. Each castle gets the average of your teammates’ soldiers, and your team army battles every other team’s. Points from each battle are multiplied by the other team’s size. Plan together.',
+    blurb: () => 'Your table fights as one. Each castle gets the average of your teammates’ soldiers, and your team army battles every other team’s. Your score is the average over every opposing player, so bigger teams count for more. Plan together.',
     match: (A, B, c) => classic(A.army, B.army, c.values),
   },
 
@@ -191,35 +191,6 @@ const MODES = {
       const [a, b] = classic(A.army, B.army, c.values);
       const pot = sum(c.values);
       return a > b ? [pot, 0] : b > a ? [0, pot] : [0, 0];
-    },
-  },
-
-  mirror: {
-    name: 'Mirror Match', style: 'Geometry and linear algebra', source: 'claude',
-    params: [{ key: 'angle', label: 'Void if angle below (degrees)', default: 10, min: 0, max: 90, step: 1 }],
-    blurb: (p) => `Think of each army as a vector in ℝ¹⁰. If the angle between yours and your opponent’s is under ${p.angle}°, the matchup is void (0–0). Otherwise it’s scored like Classic. Don’t follow the crowd.`,
-    match: (A, B, c) => {
-      const a = A.army, b = B.army;
-      let dot = 0, na = 0, nb = 0;
-      for (let i = 0; i < CASTLES; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
-      if (na > 0 && nb > 0) {
-        const ang = Math.acos(Math.min(1, dot / Math.sqrt(na * nb))) * 180 / Math.PI;
-        if (ang < c.params.angle) return [0, 0];
-      }
-      return classic(a, b, c.values);
-    },
-  },
-
-  proportional: {
-    name: 'Proportional Spoils', style: 'Calculus and optimisation', source: 'claude',
-    blurb: () => 'Castles are shared, not captured. With a soldiers against b, you get value × a ÷ (a + b) of each castle. One extra soldier no longer flips a whole castle.',
-    match: (A, B, c) => {
-      let a = 0, b = 0;
-      for (let i = 0; i < CASTLES; i++) {
-        const x = A.army[i], y = B.army[i];
-        if (x + y > 0) { a += c.values[i] * x / (x + y); b += c.values[i] * y / (x + y); }
-      }
-      return [a, b];
     },
   },
 };
@@ -327,6 +298,7 @@ function scoreRound({ round, entries, teams, soldiers, prev = {}, secret = {} })
       else if (sy > sx) { rec[Y].won += groups[X].length; rec[X].lost += groups[Y].length; }
       else { rec[X].drawn += groups[Y].length; rec[Y].drawn += groups[X].length; }
     }
+    for (const id of ids) rec[id].score = rec[id].opponents ? rec[id].score / rec[id].opponents : 0;
     for (const p of P) Object.assign(players[p.playerId], rec[p.teamId], { score: rec[p.teamId].score });
     for (const id of ids) teamScore[id] = rec[id].score;
     ctx.reveal.teamArmies = Object.fromEntries(ids.map((id) => [id, tArmy[id].map(r2)]));
@@ -339,6 +311,8 @@ function scoreRound({ round, entries, teams, soldiers, prev = {}, secret = {} })
       ra.score += sa; rb.score += sb; ra.opponents++; rb.opponents++;
       if (sa > sb) { ra.won++; rb.lost++; } else if (sb > sa) { rb.won++; ra.lost++; } else { ra.drawn++; rb.drawn++; }
     }
+    // A player's round score is the average over all their matchups, not the sum.
+    for (const p of P) { const pl = players[p.playerId]; pl.score = pl.opponents ? pl.score / pl.opponents : 0; }
     // Team score = best individual score in the team.
     for (const p of P) teamScore[p.teamId] = Math.max(teamScore[p.teamId] || 0, players[p.playerId].score);
   }

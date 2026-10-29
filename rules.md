@@ -21,7 +21,7 @@ Castle Clash is a version of **Colonel Blotto**, a strategy game about dividing 
    - If you assigned equal numbers, **neither player earns any points** for that castle.
 
 3. **Calculate individual scores.**  
-   Your score for the round is the **sum of the points you earned across all matchups** against players outside your team.
+   Your score for the round is the **average of the points you earned across all matchups** against players outside your team.
 
 4. **Calculate team scores.**  
    Your team’s score for the round is the **highest individual round score among its members**. Only that score counts toward the team’s total for the round.

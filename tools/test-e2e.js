@@ -51,14 +51,39 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
     assert.strictEqual(me.me.teamName, 'Red');
     assert.ok(!JSON.stringify(me).includes(teams[1].code));
 
-    // build a plan with all 15 modes, short durations
+    // build a plan with all 13 modes, short durations
     const modes = Object.keys(M.MODES);
     assert.strictEqual((await admin('rounds/set', { rounds: modes.map((m) => ({ mode: m, duration: 30 })) })).ok, true);
     st = await astate();
-    assert.strictEqual(st.rounds.length, 15);
+    assert.strictEqual(st.rounds.length, modes.length);
 
     const sub = (p, alloc) => call('/api/submit', { method: 'POST', body: { alloc }, headers: { 'x-player-token': p.token } });
     assert.strictEqual((await sub(players[0], M.randomAlloc({ mode: 'classic' }, 100))).status, 409, 'no round yet');
+
+    // rules countdown: the round is announced first, then starts by itself or when the host presses Start now
+    assert.strictEqual(st.settings.briefingSeconds, 30, 'default 30 s of rules');
+    assert.strictEqual((await admin('game/start')).ok, true);
+    st = await astate();
+    assert.strictEqual(st.status, 'briefing');
+    assert.ok(st.briefingEndsAt - st.now > 29000 && st.briefingEndsAt - st.now <= 30000, '30 s countdown');
+    assert.ok(st.round.blurb.length > 20, 'rules are visible while the countdown runs');
+    assert.strictEqual((await sub(players[0], M.randomAlloc({ mode: 'classic' }, 100))).status, 409, 'cannot submit during the rules countdown');
+    assert.strictEqual((await admin('game/begin')).ok, true);
+    st = await astate();
+    assert.strictEqual(st.status, 'active'); assert.strictEqual(st.briefingEndsAt, null);
+    assert.strictEqual((await sub(players[0], M.randomAlloc({ mode: 'classic' }, 100))).ok, true, 'can submit once started');
+    assert.strictEqual((await admin('game/cancel')).ok, true);
+    assert.strictEqual((await admin('settings/set', { settings: { briefingSeconds: 1 } })).ok, true);
+    assert.strictEqual((await admin('game/start')).ok, true);
+    assert.strictEqual((await astate()).status, 'briefing');
+    await sleep(1500);
+    assert.strictEqual((await astate()).status, 'active', 'starts by itself when the countdown ends');
+    assert.strictEqual((await admin('game/cancel')).ok, true);
+    assert.strictEqual((await admin('game/start')).ok, true);
+    assert.strictEqual((await admin('game/cancel')).ok, true, 'can cancel during the countdown');
+    assert.strictEqual((await astate()).status, 'lobby');
+    console.log('  ✓ rules countdown: 30 s default, start now, auto start, cancel');
+    assert.strictEqual((await admin('settings/set', { settings: { briefingSeconds: 0 } })).ok, true);
 
     for (let i = 0; i < modes.length; i++) {
       const mode = modes[i];
@@ -92,10 +117,10 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
     assert.strictEqual(fin.finished, true);
     const sumCheck = fin.board.overall.every((t) => Math.abs(t.total - t.perRound.reduce((a, b) => a + b, 0)) < 0.01);
     assert.ok(sumCheck, 'totals add up');
-    assert.strictEqual(fin.board.topScores.length, 15);
+    assert.strictEqual(fin.board.topScores.length, modes.length);
     for (const t of fin.board.overall) {
       assert.strictEqual(t.members.length, 3, 'three players per team');
-      t.members.forEach((m) => assert.strictEqual(m.perRound.length, 15));
+      t.members.forEach((m) => assert.strictEqual(m.perRound.length, modes.length));
     }
     const sat = fin.board.overall.flatMap((t) => t.members).filter((m) => m.perRound.every((v) => v === null));
     assert.strictEqual(sat.length, 1, 'the player who never submitted shows dashes');
@@ -113,7 +138,7 @@ const astate = () => call('/api/admin/state', { headers: { 'x-admin-key': PW } }
     st = await astate();
     assert.strictEqual(st.adminTeams.length, 3);
     assert.deepStrictEqual(st.adminTeams.map((t) => t.code).sort(), teams.map((t) => t.code).sort(), 'codes restored');
-    assert.strictEqual(st.rounds.length, 15);
+    assert.strictEqual(st.rounds.length, modes.length);
     console.log('  ✓ config saved and restored with team codes');
 
     // manual reveal + discard + persistence across restart
