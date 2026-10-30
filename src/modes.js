@@ -1,5 +1,5 @@
 'use strict';
-// Castle Clash — round modes and the scoring engine.
+// Castle Strategy — round modes and the scoring engine.
 // Every mode decides how a single matchup (or team-vs-team battle) is scored.
 
 const CASTLES = 10;

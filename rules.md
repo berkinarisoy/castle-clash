@@ -1,6 +1,6 @@
-# Castle Clash
+# Castle Strategy
 
-Castle Clash is a version of **Colonel Blotto**, a strategy game about dividing limited resources among competing objectives. Each round, you allocate soldiers to castles without seeing your opponents’ allocations. The larger army wins each castle and earns its points.
+Castle Strategy is a version of **Colonel Blotto**, a strategy game about dividing limited resources among competing objectives. Each round, you allocate soldiers to castles without seeing your opponents’ allocations. The larger army wins each castle and earns its points.
 
 ## Setup and objective
 

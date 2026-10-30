@@ -1,5 +1,5 @@
 'use strict';
-// Castle Clash — game server. Zero dependencies: needs only Node.js 18+.
+// Castle Strategy — game server. Zero dependencies: needs only Node.js 18+.
 //   node server.js            (PORT=3000 by default, ADMIN_PASSWORD optional)
 const http = require('http');
 const fs = require('fs');
@@ -55,7 +55,7 @@ function normRound(r = {}, keepId = true) {
 }
 function defaultSettings() {
   return {
-    title: 'Castle Clash', soldiers: 100, autoReveal: true, nonSubmit: 'exclude',
+    title: 'Castle Strategy', soldiers: 100, autoReveal: true, nonSubmit: 'exclude',
     allowJoin: true, showTeammates: true, publicUrl: '', briefingSeconds: 30,
   };
 }
@@ -80,7 +80,7 @@ function freshState() {
   };
 }
 let S;
-try { S = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); S = { ...freshState(), ...S, settings: { ...defaultSettings(), ...S.settings } }; }
+try { S = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); S = { ...freshState(), ...S, settings: { ...defaultSettings(), ...S.settings } }; if (S.settings.title === 'Castle Clash') S.settings.title = 'Castle Strategy'; }
 catch { S = freshState(); }
 
 let saveTimer = null;
@@ -449,11 +449,11 @@ function buildPreset(name, includeTeams) {
   };
 }
 function applyPreset(p, includeTeams) {
-  if (!p || !Array.isArray(p.rounds)) throw new Error('That file is not a Castle Clash config.');
+  if (!p || !Array.isArray(p.rounds)) throw new Error('That file is not a Castle Strategy config.');
   if (inRound()) throw new Error('Finish or cancel the running round first.');
   const keepPlayed = S.rounds.filter((r) => S.results[r.id]);
   S.rounds = [...keepPlayed, ...p.rounds.map((r) => normRound(r, false))];
-  if (p.settings) S.settings = { ...defaultSettings(), ...p.settings, publicUrl: S.settings.publicUrl || p.settings.publicUrl || '' };
+  if (p.settings) S.settings = { ...defaultSettings(), ...p.settings, publicUrl: S.settings.publicUrl || p.settings.publicUrl || '' }; if (S.settings.title === 'Castle Clash') S.settings.title = 'Castle Strategy';
   if (includeTeams && Array.isArray(p.teams) && p.teams.length) {
     const used = new Set();
     const next = p.teams.map((t, i) => {
@@ -511,7 +511,7 @@ const actions = {
   'settings/set': (b) => {
     const s = b.settings || {};
     const cur = S.settings;
-    if (s.title !== undefined) cur.title = String(s.title).slice(0, 40) || 'Castle Clash';
+    if (s.title !== undefined) cur.title = String(s.title).slice(0, 40) || 'Castle Strategy';
     if (s.soldiers !== undefined && !inRound()) cur.soldiers = Math.max(10, Math.min(1000, Math.round(Number(s.soldiers)) || 100));
     for (const k of ['autoReveal', 'allowJoin', 'showTeammates']) if (s[k] !== undefined) cur[k] = !!s[k];
     if (s.nonSubmit !== undefined) cur.nonSubmit = s.nonSubmit === 'zero' ? 'zero' : 'exclude';
@@ -592,7 +592,7 @@ function recoverTimer() {
   else if (S.current.status === 'briefing') { if (now() >= S.current.briefingEndsAt) beginRound(); else schedule(); }
 }
 function restoreBackup(b) {
-  if (!b || b.app !== 'castle-clash-backup' || !b.state || !Array.isArray(b.state.teams)) throw new Error('That isn’t a Castle Clash backup.');
+  if (!b || b.app !== 'castle-clash-backup' || !b.state || !Array.isArray(b.state.teams)) throw new Error('That isn’t a Castle Strategy backup.');
   clearTimeout(roundTimer);
   S = { ...freshState(), ...b.state, settings: { ...defaultSettings(), ...b.state.settings } };
   for (const pr of b.presets || []) if (pr && pr.file && pr.data) fs.writeFileSync(path.join(PRESETS, slug(pr.file) + '.json'), JSON.stringify(pr.data, null, 2));
@@ -744,7 +744,7 @@ if (process.argv.includes('--tunnel') || process.env.TUNNEL === '1') startTunnel
 
 server.listen(PORT, '0.0.0.0', () => {
   const urls = lanUrls();
-  console.log('\n  Castle Clash is running.\n');
+  console.log('\n  Castle Strategy is running.\n');
   console.log(`  Admin dashboard:  http://localhost:${PORT}/admin`);
   console.log(`  Admin password:   ${ADMIN_PASSWORD}${process.env.ADMIN_PASSWORD ? '' : `   (stored in data/admin-password.txt)`}`);
   console.log(`  Leaderboard:      http://localhost:${PORT}/board`);
