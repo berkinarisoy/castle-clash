@@ -1,4 +1,4 @@
-// Castle Strategy — shared client helpers
+// Number Siege — shared client helpers
 const CC = (() => {
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));

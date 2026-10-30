@@ -1,4 +1,4 @@
-// Castle Strategy — player app (phones)
+// Number Siege — player app (phones)
 (() => {
   const { $, esc, fmt, api, live, toast, skyline, clock, remaining, shield, t, loc, titleOf, modeNameOf, wld } = CC;
   const app = $('#app'), dock = $('#dock'), dockInner = $('#dockInner');
@@ -102,7 +102,7 @@
   // ---------- join ----------
   function renderJoin() {
     const pre = new URLSearchParams(location.search).get('code') || '';
-    app.innerHTML = `<div style="text-align:right">${langBtn()}</div><div class="join-hero">${castleIcon()}<h1 style="margin-top:14px">${esc(S.title || 'Castle Strategy')}</h1>
+    app.innerHTML = `<div style="text-align:right">${langBtn()}</div><div class="join-hero">${castleIcon()}<h1 style="margin-top:14px">${esc(!S.title || S.title === 'The Number Siege' ? t('The Number Siege', '數字攻城戰') : S.title)}</h1>
       <p class="muted" style="margin-top:8px">${t('Enter the room code from the big screen, the code on your table card, then your name.', '輸入大螢幕上的房間代碼、你桌上卡片的組別代碼，然後輸入你的名字。')}</p></div>
       <form class="panel stack" id="joinForm" autocomplete="off">
         <label class="field"><span>${t('Room code (3 digits, on the big screen)', '房間代碼（3 位數字，在大螢幕上）')}</span><input type="text" class="code-input" id="room" inputmode="numeric" pattern="[0-9]*" maxlength="3" aria-describedby="joinErr"></label>

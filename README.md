@@ -1,4 +1,4 @@
-# Castle Strategy
+# The Number Siege
 
 A live, phone-friendly version of the Colonel Blotto game described in `rules.md`.
 Host it on your laptop or for free online. Players join from their phones with the 3-digit room code on the board and a 4-digit table code.

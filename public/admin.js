@@ -1,4 +1,4 @@
-// Castle Strategy — admin dashboard
+// Number Siege — admin dashboard
 (() => {
   const { $, esc, fmt, api, live, toast, clock, remaining, shield, qr } = CC;
   const root = $('#root');
@@ -23,7 +23,7 @@
   function logout() { key = null; ls.set('cc.admin', null); conn && conn.stop(); S = null; renderLogin(); }
   function renderLogin(msg = '') {
     root.innerHTML = `<form class="panel stack login" id="login">
-      <div class="row-flex"><img src="/static/logo.svg" width="36" height="36" alt=""><h1>Castle Strategy admin</h1></div>
+      <div class="row-flex"><img src="/static/logo.svg" width="36" height="36" alt=""><h1>Number Siege admin</h1></div>
       <p class="muted small">The password is printed in the terminal where you started the server.</p>
       <label class="field"><span>Admin password</span><input type="password" id="pw" autocomplete="current-password" autofocus></label>
       <button class="btn block" type="submit">Open dashboard</button>
@@ -360,8 +360,8 @@
     if (t.id === 'printCards') printCards();
     if (t.id === 'logout') logout();
     if (t.id === 'restoreLocal') { if (await act('restore', { backup: readBackup() }, 'Game restored')) { roundsDirty = false; settingsDraft = null; } }
-    if (t.id === 'dlBackup') download(`castle-strategy-backup-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, await api('/api/admin/backup', { headers: { 'x-admin-key': key } }));
-    if (t.id === 'exportCur') download(`castle-strategy-config.json`, await api('/api/admin/export?teams=1', { headers: { 'x-admin-key': key } }));
+    if (t.id === 'dlBackup') download(`number-siege-backup-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, await api('/api/admin/backup', { headers: { 'x-admin-key': key } }));
+    if (t.id === 'exportCur') download(`number-siege-config.json`, await api('/api/admin/export?teams=1', { headers: { 'x-admin-key': key } }));
     if (t.dataset.dlp) download(`${t.dataset.dlp}.json`, await api('/api/admin/preset?file=' + encodeURIComponent(t.dataset.dlp), { headers: { 'x-admin-key': key } }));
     if (t.dataset.loadp) {
       if (roundsDirty && !confirm('Loading replaces your unsaved round changes. Continue?')) return;

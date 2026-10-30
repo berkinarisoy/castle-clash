@@ -1,5 +1,5 @@
 'use strict';
-// Castle Strategy — round modes and the scoring engine.
+// Number Siege — round modes and the scoring engine.
 // Every mode decides how a single matchup (or team-vs-team battle) is scored.
 
 const CASTLES = 10;

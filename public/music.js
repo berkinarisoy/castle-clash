@@ -1,4 +1,4 @@
-// Castle Strategy — countdown music for the board, made with the Web Audio API (no sound files).
+// Number Siege — countdown music for the board, made with the Web Audio API (no sound files).
 // A steady march while players build their armies, faster and higher in the last 10 seconds,
 // faster again in the last 5, and a gong when time runs out. Silent while paused.
 const CountdownMusic = (() => {
